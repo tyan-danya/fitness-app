@@ -5,6 +5,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.domain.Per100
 
 /**
  * Упражнение (тренажёр). Предзаполняется при создании БД, можно добавлять свои.
@@ -62,7 +64,15 @@ data class WorkoutSet(
     val completedAt: Long,
 )
 
-/** Приём пищи. epochDay — LocalDate.toEpochDay() дня, к которому относится приём. */
+/**
+ * Приём пищи. epochDay — LocalDate.toEpochDay() дня, к которому относится приём.
+ *
+ * calories/proteinG/fatG/carbsG — итог порции (по ним считаются все суммы).
+ * servingG — вес порции в граммах (null — неизвестен).
+ * *Per100 — как пользователь ввёл значения «на 100 г» (null — вводил итог порции целиком);
+ * при заданных servingG и *Per100 итог = per100 × servingG / 100.
+ * needsEstimate — КБЖУ ещё не известно, приём ждёт расчёта (ИИ или файл-обмен).
+ */
 @Entity(tableName = "meals", indices = [Index("epochDay")])
 data class Meal(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -73,7 +83,23 @@ data class Meal(
     val proteinG: Double,
     val fatG: Double,
     val carbsG: Double,
-)
+    @ColumnInfo(defaultValue = "SNACK")
+    val mealType: MealType = MealType.SNACK,
+    val servingG: Double? = null,
+    val caloriesPer100: Double? = null,
+    val proteinPer100: Double? = null,
+    val fatPer100: Double? = null,
+    val carbsPer100: Double? = null,
+    @ColumnInfo(defaultValue = "0")
+    val needsEstimate: Boolean = false,
+) {
+    /** Значения на 100 г, если приём вводился в этом режиме. */
+    val per100: Per100?
+        get() {
+            val k = caloriesPer100 ?: return null
+            return Per100(k, proteinPer100 ?: 0.0, fatPer100 ?: 0.0, carbsPer100 ?: 0.0)
+        }
+}
 
 /** Замер веса тела. fromWorkout — контрольное взвешивание при завершении тренировки. */
 @Entity(tableName = "weight_entries")

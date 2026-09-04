@@ -8,11 +8,13 @@ import android.os.VibratorManager
 import com.dtyan.fitdiary.data.PhotoStore
 import com.dtyan.fitdiary.data.RestTimerController
 import com.dtyan.fitdiary.data.SettingsStore
+import com.dtyan.fitdiary.data.ai.NutritionEstimator
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.export.EstimateExchange
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +43,10 @@ class AppContainer(context: Context) {
         setDao = database.workoutSetDao(),
         weightDao = database.weightDao(),
     )
+
+    /** Расчёт КБЖУ через ИИ (настройки читаются при каждом запросе) и файл-обмен для ручного расчёта. */
+    val nutritionEstimator = NutritionEstimator(settings = { settings.settings.value })
+    val estimateExchange = EstimateExchange(appContext)
 
     val restTimer = RestTimerController(
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main),

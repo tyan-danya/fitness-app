@@ -170,9 +170,12 @@ private fun MealsCard(meals: List<Meal>) {
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(meal.name, style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "${meal.calories} ккал · Б ${Format.weight(meal.proteinG)} г · " +
+                            text = meal.servingG?.let { "${meal.name} · ${Format.weight(it)} г" } ?: meal.name,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = "${meal.mealType.title} · ${meal.calories} ккал · Б ${Format.weight(meal.proteinG)} г · " +
                                 "Ж ${Format.weight(meal.fatG)} г · У ${Format.weight(meal.carbsG)} г",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

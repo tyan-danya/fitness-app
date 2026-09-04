@@ -6,15 +6,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
+import com.dtyan.fitdiary.domain.MealType
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.LocalDate
+import java.time.ZoneId
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Тест миграции 1→2.
+ * Тесты миграций 1→2 и 2→3.
  *
  * MigrationTestHelper под Robolectric не работает: AGP не кладёт assets
  * test-sourceSet-а в android_merged_assets / apk-for-local-test, поэтому
@@ -197,7 +200,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
             .allowMainThreadQueries()
             .build()
         try {
@@ -222,6 +225,104 @@ class MigrationTest {
             assertThat(meals).hasSize(1)
             assertThat(meals.single().name).isEqualTo("Курица")
             assertThat(meals.single().calories).isEqualTo(650)
+            // v3: тип восстановлен по часу timestamp, новые поля пустые, флаг расчёта снят
+            assertThat(meals.single().mealType).isEqualTo(MealType.forTimestamp(123456L))
+            assertThat(meals.single().servingG).isNull()
+            assertThat(meals.single().per100).isNull()
+            assertThat(meals.single().needsEstimate).isFalse()
+        } finally {
+            db.close()
+        }
+    }
+
+    // ---------- 2 → 3: приёмы пищи ----------
+
+    /** Схема версии 2 (после MIGRATION_1_2) — meals не менялась, exercises уже с equipment/photoPath. */
+    private fun createV2DatabaseWithMeals(timestamps: List<Long>): SupportSQLiteDatabase {
+        context.deleteDatabase(TEST_DB)
+        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(TEST_DB)
+            .callback(object : SupportSQLiteOpenHelper.Callback(2) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    V1_SCHEMA_SQL.forEach(db::execSQL)
+                    db.execSQL("ALTER TABLE exercises ADD COLUMN equipment TEXT NOT NULL DEFAULT 'Другое'")
+                    db.execSQL("ALTER TABLE exercises ADD COLUMN photoPath TEXT")
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                    error("В тесте версия фиксирована: $oldVersion→$newVersion не ожидается")
+                }
+            })
+            .build()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(config)
+        openHelpers += helper
+        return helper.writableDatabase.apply {
+            timestamps.forEachIndexed { i, ts ->
+                execSQL(
+                    "INSERT INTO meals (id, epochDay, timestamp, name, calories, proteinG, fatG, carbsG) VALUES (${i + 1}, 20000, $ts, ?, 100, 1.0, 2.0, 3.0)",
+                    arrayOf<Any>("Блюдо ${i + 1}"),
+                )
+            }
+        }
+    }
+
+    private fun localMillis(hour: Int): Long =
+        LocalDate.of(2026, 9, 4).atTime(hour, 30).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    @Test
+    fun migrate2to3_addsMealColumns_andBackfillsTypeByLocalHour() {
+        // 08:30 завтрак, 13:30 обед, 19:30 ужин, 23:30 перекус — в локальной зоне устройства
+        val db = createV2DatabaseWithMeals(listOf(localMillis(8), localMillis(13), localMillis(19), localMillis(23)))
+        assertThat(db.tableInfo("meals")).doesNotContainKey("mealType")
+
+        AppDatabase.MIGRATION_2_3.migrate(db)
+
+        val columns = db.tableInfo("meals")
+        val mealType = columns.getValue("mealType")
+        assertThat(mealType.type).isEqualTo("TEXT")
+        assertThat(mealType.notNull).isTrue()
+        assertThat(mealType.default).isEqualTo("'SNACK'")
+        for (nullable in listOf("servingG", "caloriesPer100", "proteinPer100", "fatPer100", "carbsPer100")) {
+            val c = columns.getValue(nullable)
+            assertThat(c.type).isEqualTo("REAL")
+            assertThat(c.notNull).isFalse()
+        }
+        val needs = columns.getValue("needsEstimate")
+        assertThat(needs.type).isEqualTo("INTEGER")
+        assertThat(needs.notNull).isTrue()
+        assertThat(needs.default).isEqualTo("0")
+
+        db.query("SELECT id, mealType, servingG, needsEstimate, calories FROM meals ORDER BY id").use { c ->
+            val types = mutableListOf<String>()
+            while (c.moveToNext()) {
+                types += c.getString(1)
+                assertThat(c.isNull(2)).isTrue()
+                assertThat(c.getInt(3)).isEqualTo(0)
+                assertThat(c.getInt(4)).isEqualTo(100) // старые данные целы
+            }
+            assertThat(types).containsExactly("BREAKFAST", "LUNCH", "DINNER", "SNACK").inOrder()
+        }
+    }
+
+    @Test
+    fun roomOpens_v2File_runsMigration2to3_validatesSchema_andReadsViaDao() = runTest {
+        createV2DatabaseWithMeals(listOf(localMillis(13)))
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val meal = db.mealDao().getForDayOnce(20000).single()
+            assertThat(meal.mealType).isEqualTo(MealType.LUNCH)
+            assertThat(meal.needsEstimate).isFalse()
+            assertThat(meal.servingG).isNull()
+
+            // Новые DAO-запросы работают на мигрированной схеме
+            db.mealDao().setMealType(meal.id, MealType.DINNER)
+            assertThat(db.mealDao().getByIds(listOf(meal.id)).single().mealType).isEqualTo(MealType.DINNER)
+            assertThat(db.mealDao().getPendingEstimatesOnce()).isEmpty()
         } finally {
             db.close()
         }

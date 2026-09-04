@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import com.dtyan.fitdiary.domain.MealType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -187,6 +188,19 @@ interface MealDao {
 
     @Query("SELECT * FROM meals ORDER BY timestamp, id")
     suspend fun getAllOnce(): List<Meal>
+
+    /** Приёмы, ждущие расчёта КБЖУ (для выгрузки в файл-обмен). */
+    @Query("SELECT * FROM meals WHERE needsEstimate = 1 ORDER BY epochDay, timestamp, id")
+    suspend fun getPendingEstimatesOnce(): List<Meal>
+
+    @Query("SELECT COUNT(*) FROM meals WHERE needsEstimate = 1")
+    fun observePendingEstimateCount(): Flow<Int>
+
+    @Query("SELECT * FROM meals WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<Meal>
+
+    @Query("UPDATE meals SET mealType = :type WHERE id = :id")
+    suspend fun setMealType(id: Long, type: MealType)
 
     @Insert
     suspend fun insert(meal: Meal): Long

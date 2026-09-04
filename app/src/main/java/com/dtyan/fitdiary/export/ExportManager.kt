@@ -68,6 +68,13 @@ private data class ExportMeal(
     val proteinG: Double,
     val fatG: Double,
     val carbsG: Double,
+    val mealType: String,
+    val servingG: Double? = null,
+    val caloriesPer100: Double? = null,
+    val proteinPer100: Double? = null,
+    val fatPer100: Double? = null,
+    val carbsPer100: Double? = null,
+    val needsEstimate: Boolean = false,
 )
 
 /**
@@ -136,6 +143,13 @@ class ExportManager(
                 proteinG = meal.proteinG,
                 fatG = meal.fatG,
                 carbsG = meal.carbsG,
+                mealType = meal.mealType.name,
+                servingG = meal.servingG,
+                caloriesPer100 = meal.caloriesPer100,
+                proteinPer100 = meal.proteinPer100,
+                fatPer100 = meal.fatPer100,
+                carbsPer100 = meal.carbsPer100,
+                needsEstimate = meal.needsEstimate,
             )
         }
         val root = ExportRoot(
@@ -190,17 +204,28 @@ class ExportManager(
 
     suspend fun buildMealsCsv(): String {
         val sb = StringBuilder()
-        sb.appendLine(row("date", "time", "name", "calories", "protein_g", "fat_g", "carbs_g"))
+        sb.appendLine(
+            row(
+                "date", "time", "meal_type", "name", "serving_g", "calories", "protein_g", "fat_g", "carbs_g",
+                "kcal_per_100g", "protein_per_100g", "fat_per_100g", "carbs_per_100g",
+            )
+        )
         for (meal in nutritionRepository.getAllOnce()) {
             sb.appendLine(
                 row(
                     LocalDate.ofEpochDay(meal.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
                     timeHm(meal.timestamp),
+                    meal.mealType.title,
                     meal.name,
+                    meal.servingG?.let(::csvNum) ?: "",
                     meal.calories.toString(),
                     csvNum(meal.proteinG),
                     csvNum(meal.fatG),
                     csvNum(meal.carbsG),
+                    meal.caloriesPer100?.let(::csvNum) ?: "",
+                    meal.proteinPer100?.let(::csvNum) ?: "",
+                    meal.fatPer100?.let(::csvNum) ?: "",
+                    meal.carbsPer100?.let(::csvNum) ?: "",
                 )
             )
         }

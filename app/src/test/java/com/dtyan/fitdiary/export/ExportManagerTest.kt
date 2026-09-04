@@ -207,21 +207,27 @@ class ExportManagerTest {
 
         val lines = manager.buildMealsCsv().trimEnd('\n').split("\n")
 
-        assertThat(lines[0]).isEqualTo("date;time;name;calories;protein_g;fat_g;carbs_g")
+        assertThat(lines[0]).isEqualTo(
+            "date;time;meal_type;name;serving_g;calories;protein_g;fat_g;carbs_g;" +
+                "kcal_per_100g;protein_per_100g;fat_per_100g;carbs_per_100g"
+        )
         assertThat(lines).hasSize(3) // заголовок + 2 приёма пищи
 
         val first = lines[1].split(";") // «Овсянка» — раньше по timestamp
         assertThat(first[0]).isEqualTo("2026-07-31") // дата из epochDay — зоны не касается
-        assertThat(first[2]).isEqualTo("Овсянка")
-        assertThat(first[3]).isEqualTo("350")
-        assertThat(first[4]).isEqualTo("12,5") // десятичная запятая
-        assertThat(first[5]).isEqualTo("7") // без хвостовых нулей
-        assertThat(first[6]).isEqualTo("55")
+        assertThat(first[2]).isEqualTo("Обед") // тип по часу timestamp (t0 − 20 ч = полдень)
+        assertThat(first[3]).isEqualTo("Овсянка")
+        assertThat(first[4]).isEmpty() // вес порции не задан
+        assertThat(first[5]).isEqualTo("350")
+        assertThat(first[6]).isEqualTo("12,5") // десятичная запятая
+        assertThat(first[7]).isEqualTo("7") // без хвостовых нулей
+        assertThat(first[8]).isEqualTo("55")
+        assertThat(first[9]).isEmpty() // «на 100 г» не вводилось
 
         val second = lines[2].split(";")
         assertThat(second[0]).isEqualTo("2026-08-01")
-        assertThat(second[2]).isEqualTo("Курица с рисом")
-        assertThat(second[6]).isEqualTo("70,5")
+        assertThat(second[3]).isEqualTo("Курица с рисом")
+        assertThat(second[8]).isEqualTo("70,5")
     }
 
     @Test
