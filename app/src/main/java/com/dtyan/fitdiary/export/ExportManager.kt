@@ -27,6 +27,7 @@ import java.util.Locale
 @Serializable
 private data class ExportRoot(
     val exportedAt: String,
+    val athleteId: Long,
     val bodyWeights: List<ExportBodyWeight>,
     val workouts: List<ExportWorkout>,
     val meals: List<ExportMeal>,
@@ -123,9 +124,9 @@ class ExportManager(
     // ---------- JSON ----------
 
     /** Чистое построение JSON-строки экспорта (без IO с файлами — удобно тестировать). */
-    suspend fun buildJsonString(now: Long = System.currentTimeMillis()): String {
-        val weights = statsRepository.observeWeightHistory().first()
-        val workouts = statsRepository.getAllFinishedWorkoutsOnce().map { workout ->
+    suspend fun buildJsonString(now: Long = System.currentTimeMillis(), athleteId: Long = nutritionRepository.currentAthleteId): String {
+        val weights = statsRepository.getWeightHistoryOnce(athleteId)
+        val workouts = statsRepository.getAllFinishedWorkoutsOnce(athleteId).map { workout ->
             val sets = workoutRepository.getSetsForWorkoutOnce(workout.id)
             val ended = workout.endedAt ?: workout.startedAt
             ExportWorkout(
@@ -147,7 +148,7 @@ class ExportManager(
                 },
             )
         }
-        val meals = nutritionRepository.getAllOnce().map { meal ->
+        val meals = nutritionRepository.getAllOnce(athleteId).map { meal ->
             ExportMeal(
                 date = LocalDate.ofEpochDay(meal.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
                 time = timeHm(meal.timestamp),
@@ -167,12 +168,13 @@ class ExportManager(
         }
         val root = ExportRoot(
             exportedAt = iso(now),
+            athleteId = athleteId,
             bodyWeights = weights.map {
                 ExportBodyWeight(dateTime = iso(it.timestamp), weightKg = it.weightKg, fromWorkout = it.fromWorkout)
             },
             workouts = workouts,
             meals = meals,
-            measurements = measurementRepository?.getAllOnce().orEmpty().map { m ->
+            measurements = measurementRepository?.getAllOnce(athleteId).orEmpty().map { m ->
                 ExportMeasurement(
                     date = LocalDate.ofEpochDay(m.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
                     time = timeHm(m.timestamp),
@@ -203,10 +205,10 @@ class ExportManager(
 
     private fun row(vararg fields: String): String = fields.joinToString(";") { csvField(it) }
 
-    suspend fun buildWorkoutSetsCsv(): String {
+    suspend fun buildWorkoutSetsCsv(athleteId: Long = nutritionRepository.currentAthleteId): String {
         val sb = StringBuilder()
         sb.appendLine(row("date", "start", "end", "duration_min", "exercise", "muscle_group", "set_index", "weight_kg", "reps"))
-        for (workout in statsRepository.getAllFinishedWorkoutsOnce()) {
+        for (workout in statsRepository.getAllFinishedWorkoutsOnce(athleteId)) {
             val ended = workout.endedAt ?: workout.startedAt
             val date = isoDate(workout.startedAt)
             val start = timeHm(workout.startedAt)
@@ -225,7 +227,7 @@ class ExportManager(
         return sb.toString()
     }
 
-    suspend fun buildMealsCsv(): String {
+    suspend fun buildMealsCsv(athleteId: Long = nutritionRepository.currentAthleteId): String {
         val sb = StringBuilder()
         sb.appendLine(
             row(
@@ -233,7 +235,7 @@ class ExportManager(
                 "kcal_per_100g", "protein_per_100g", "fat_per_100g", "carbs_per_100g",
             )
         )
-        for (meal in nutritionRepository.getAllOnce()) {
+        for (meal in nutritionRepository.getAllOnce(athleteId)) {
             sb.appendLine(
                 row(
                     LocalDate.ofEpochDay(meal.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
@@ -255,10 +257,10 @@ class ExportManager(
         return sb.toString()
     }
 
-    suspend fun buildMeasurementsCsv(): String {
+    suspend fun buildMeasurementsCsv(athleteId: Long = nutritionRepository.currentAthleteId): String {
         val sb = StringBuilder()
         sb.appendLine(row("date", "time", "type", "title", "value_cm", "note"))
-        for (m in measurementRepository?.getAllOnce().orEmpty()) {
+        for (m in measurementRepository?.getAllOnce(athleteId).orEmpty()) {
             sb.appendLine(
                 row(
                     LocalDate.ofEpochDay(m.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
@@ -273,10 +275,10 @@ class ExportManager(
         return sb.toString()
     }
 
-    suspend fun buildWeightsCsv(): String {
+    suspend fun buildWeightsCsv(athleteId: Long = nutritionRepository.currentAthleteId): String {
         val sb = StringBuilder()
         sb.appendLine(row("date", "time", "weight_kg", "from_workout"))
-        for (entry in statsRepository.observeWeightHistory().first()) {
+        for (entry in statsRepository.getWeightHistoryOnce(athleteId)) {
             sb.appendLine(
                 row(
                     isoDate(entry.timestamp),
@@ -299,9 +301,9 @@ class ExportManager(
     private fun todayStamp(): String = LocalDate.now(zone).format(DateTimeFormatter.ISO_LOCAL_DATE)
 
     /** Полный JSON-экспорт → chooser «поделиться файлом». */
-    suspend fun exportJson(): Intent = withContext(Dispatchers.IO) {
-        val content = buildJsonString()
-        val file = File(exportsDir(), "fitdiary-export-${todayStamp()}.json")
+    suspend fun exportJson(athleteId: Long = nutritionRepository.currentAthleteId): Intent = withContext(Dispatchers.IO) {
+        val content = buildJsonString(athleteId = athleteId)
+        val file = File(exportsDir(), "fitdiary-export-athlete-$athleteId-${todayStamp()}-${System.currentTimeMillis()}.json")
         file.writeText(content, Charsets.UTF_8)
         val uri = uriFor(file)
         val send = Intent(Intent.ACTION_SEND).apply {
@@ -316,14 +318,14 @@ class ExportManager(
     }
 
     /** Четыре CSV (подходы, питание, вес, замеры) с BOM для Excel → chooser. */
-    suspend fun exportCsv(): Intent = withContext(Dispatchers.IO) {
-        val stamp = todayStamp()
+    suspend fun exportCsv(athleteId: Long = nutritionRepository.currentAthleteId): Intent = withContext(Dispatchers.IO) {
+        val stamp = "athlete-$athleteId-${todayStamp()}-${System.currentTimeMillis()}"
         val bom = "\uFEFF" // BOM — чтобы русский Excel распознал UTF-8
         val files = listOf(
-            "fitdiary-sets-$stamp.csv" to buildWorkoutSetsCsv(),
-            "fitdiary-meals-$stamp.csv" to buildMealsCsv(),
-            "fitdiary-weights-$stamp.csv" to buildWeightsCsv(),
-            "fitdiary-measurements-$stamp.csv" to buildMeasurementsCsv(),
+            "fitdiary-sets-$stamp.csv" to buildWorkoutSetsCsv(athleteId),
+            "fitdiary-meals-$stamp.csv" to buildMealsCsv(athleteId),
+            "fitdiary-weights-$stamp.csv" to buildWeightsCsv(athleteId),
+            "fitdiary-measurements-$stamp.csv" to buildMeasurementsCsv(athleteId),
         ).map { (name, content) ->
             File(exportsDir(), name).apply { writeText(bom + content, Charsets.UTF_8) }
         }

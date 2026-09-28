@@ -4,17 +4,12 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
-import com.dtyan.fitdiary.data.RestTimerController
-import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -39,9 +34,6 @@ class ExerciseLogViewModelPhotoTest {
     private lateinit var db: AppDatabase
     private lateinit var workoutRepo: WorkoutRepository
     private lateinit var exerciseRepo: ExerciseRepository
-    private lateinit var settingsStore: SettingsStore
-    private lateinit var timerScope: CoroutineScope
-    private lateinit var restTimer: RestTimerController
 
     @Before
     fun setUp() {
@@ -54,14 +46,10 @@ class ExerciseLogViewModelPhotoTest {
             .build()
         workoutRepo = WorkoutRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
         exerciseRepo = ExerciseRepository(db.exerciseDao(), db.workoutSetDao())
-        settingsStore = SettingsStore(context)
-        timerScope = CoroutineScope(SupervisorJob() + mainRule.dispatcher)
-        restTimer = RestTimerController(scope = timerScope, onFinished = {})
     }
 
     @After
     fun tearDown() {
-        timerScope.cancel()
         db.close()
     }
 
@@ -80,8 +68,6 @@ class ExerciseLogViewModelPhotoTest {
         exerciseId = exerciseId,
         workoutRepository = workoutRepo,
         exerciseRepository = exerciseRepo,
-        settingsStore = settingsStore,
-        restTimer = restTimer,
     )
 
     @Test

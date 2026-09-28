@@ -35,6 +35,7 @@ object MeasurementReminder {
     const val CHANNEL_ID = "measurement_reminder"
     const val NOTIFICATION_ID = 7031
     const val EXTRA_OPEN_TAB = "open_tab"
+    const val EXTRA_ATHLETE_ID = "athlete_id"
     const val TAB_MEASUREMENTS = "measurements"
     private const val REQUEST_CODE = 7031
 
@@ -90,21 +91,22 @@ object MeasurementReminder {
     }
 
     /** Показывает уведомление (если разрешено). daysSilent — сколько дней без замеров. */
-    fun notify(context: Context, daysSilent: Long) {
+    fun notify(context: Context, daysSilent: Long, athleteId: Long = 1L, athleteName: String = "Я") {
         if (!hasNotificationPermission(context)) return
         ensureChannel(context)
         val open = PendingIntent.getActivity(
             context,
-            REQUEST_CODE,
+            REQUEST_CODE + athleteId.toInt(),
             Intent(context, MainActivity::class.java)
                 .putExtra(EXTRA_OPEN_TAB, TAB_MEASUREMENTS)
+                .putExtra(EXTRA_ATHLETE_ID, athleteId)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val text = if (daysSilent <= 0) "Пора снять мерки" else "Замеров не было $daysSilent ${pluralDays(daysSilent)} — пора снять мерки"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_edit)
-            .setContentTitle("Замеры тела")
+            .setContentTitle("Замеры тела · $athleteName")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -114,7 +116,7 @@ object MeasurementReminder {
             .setContentIntent(open)
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID + athleteId.toInt(), notification)
         } catch (_: SecurityException) {
             // разрешение отозвали между проверкой и показом — молча пропускаем
         }
@@ -139,7 +141,8 @@ class MeasurementReminderReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         val container = context.appContainer
-        val settings = container.settings.settings.value
+        val athleteId = container.profiles.activeId.value
+        val settings = container.settings.settingsFor(athleteId)
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED ->
                 MeasurementReminder.schedule(context, settings.measurementReminderEnabled, settings.measurementReminderHour)
@@ -148,7 +151,9 @@ class MeasurementReminderReceiver : BroadcastReceiver() {
                 val result = goAsync()
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val last = container.measurementRepository.lastEpochDay()
+                        val athlete = container.database.athleteDao().getById(athleteId)
+                        if (athlete == null || athlete.isArchived) return@launch
+                        val last = container.measurementRepository.lastEpochDay(athleteId)
                         val today = LocalDate.now().toEpochDay()
                         val due = measurementReminderDue(
                             lastEpochDay = last,
@@ -156,7 +161,7 @@ class MeasurementReminderReceiver : BroadcastReceiver() {
                             todayEpochDay = today,
                             thresholdDays = settings.measurementReminderDays,
                         )
-                        if (due) MeasurementReminder.notify(context, today - (last ?: settings.measurementReminderSinceDay))
+                        if (due) MeasurementReminder.notify(context, today - (last ?: settings.measurementReminderSinceDay), athleteId, athlete.name)
                     } finally {
                         result.finish()
                     }

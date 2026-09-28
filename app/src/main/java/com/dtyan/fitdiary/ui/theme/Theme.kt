@@ -17,11 +17,11 @@ import androidx.compose.ui.unit.dp
  */
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF16A34A),
+    primary = Color(0xFF15803D),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFFDCFCE7),
     onPrimaryContainer = Color(0xFF14532D),
-    secondary = Color(0xFFEA8A00),
+    secondary = Color(0xFF9A4D00),
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFFFEDD5),
     onSecondaryContainer = Color(0xFF7C2D12),

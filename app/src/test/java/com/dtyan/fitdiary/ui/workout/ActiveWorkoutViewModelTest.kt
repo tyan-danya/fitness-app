@@ -4,16 +4,13 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
-import com.dtyan.fitdiary.data.RestTimerController
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Exercise
+import com.dtyan.fitdiary.data.db.Athlete
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -42,8 +39,6 @@ class ActiveWorkoutViewModelTest {
     private lateinit var db: AppDatabase
     private lateinit var workoutRepo: WorkoutRepository
     private lateinit var statsRepo: StatsRepository
-    private lateinit var timerScope: CoroutineScope
-    private lateinit var restTimer: RestTimerController
 
     /** Фиксированное время: 2026-08-01T10:00 Europe/Moscow. */
     private val t0: Long = ZonedDateTime
@@ -63,13 +58,10 @@ class ActiveWorkoutViewModelTest {
             .build()
         workoutRepo = WorkoutRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
         statsRepo = StatsRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
-        timerScope = CoroutineScope(SupervisorJob() + mainRule.dispatcher)
-        restTimer = RestTimerController(scope = timerScope, onFinished = {})
     }
 
     @After
     fun tearDown() {
-        timerScope.cancel()
         db.close()
     }
 
@@ -79,8 +71,6 @@ class ActiveWorkoutViewModelTest {
     private fun createVm(workoutId: Long) = ActiveWorkoutViewModel(
         workoutId = workoutId,
         workoutRepository = workoutRepo,
-        statsRepository = statsRepo,
-        restTimer = restTimer,
     )
 
     private fun countRows(table: String): Int =
@@ -129,13 +119,11 @@ class ActiveWorkoutViewModelTest {
     // ---------- Завершение ----------
 
     @Test
-    fun finishWorkout_withWeight_endsWorkout_createsWeightEntry_stopsTimer_closesOnce() = runTest {
+    fun finishWorkout_withWeight_endsWorkout_createsWeightEntry_closesOnce() = runTest {
         val e = exercise("Жим лёжа", "Грудь")
         val w = workoutRepo.startWorkout(now = t0)
         workoutRepo.addSet(w, e, 100.0, 5, now = t0 + min)
         val vm = createVm(w)
-        restTimer.start(90)
-        assertThat(restTimer.state.value).isNotNull()
 
         var closedCount = 0
         vm.finishWorkout(bodyWeightKg = 82.5) { closedCount++ }
@@ -155,8 +143,6 @@ class ActiveWorkoutViewModelTest {
         assertThat(entries.single().weightKg).isEqualTo(82.5)
         assertThat(entries.single().fromWorkout).isTrue()
 
-        // Таймер отдыха остановлен самим VM.
-        assertThat(restTimer.state.value).isNull()
     }
 
     @Test
@@ -178,14 +164,13 @@ class ActiveWorkoutViewModelTest {
     // ---------- Отмена ----------
 
     @Test
-    fun cancelWorkout_deletesWorkoutWithSets_stopsTimer() = runTest {
+    fun cancelWorkout_deletesWorkoutWithSets() = runTest {
         val e = exercise("Жим лёжа", "Грудь")
         val w = workoutRepo.startWorkout(now = t0)
         workoutRepo.addSet(w, e, 100.0, 5, now = t0 + min)
         workoutRepo.addSet(w, e, 100.0, 5, now = t0 + 2 * min)
         assertThat(countRows("workout_sets")).isEqualTo(2)
         val vm = createVm(w)
-        restTimer.start(60)
 
         var closed = false
         vm.cancelWorkout { closed = true }
@@ -195,7 +180,6 @@ class ActiveWorkoutViewModelTest {
         assertThat(db.workoutDao().getById(w)).isNull()
         assertThat(countRows("workouts")).isEqualTo(0)
         assertThat(countRows("workout_sets")).isEqualTo(0) // CASCADE
-        assertThat(restTimer.state.value).isNull()
     }
 
     // ---------- Данные для сводки диалога завершения ----------
@@ -218,5 +202,56 @@ class ActiveWorkoutViewModelTest {
         assertThat(sets).hasSize(3)
         assertThat(sets.sumOf { it.weightKg * it.reps }).isWithin(1e-9).of(1615.0)
         assertThat(sets.map { it.exerciseId }.distinct()).hasSize(2)
+    }
+
+    @Test
+    fun repeatedPlan_showsExercisesBeforeAnySetIsRecorded() = runTest {
+        val exerciseId = exercise("Жим", "Грудь")
+        val original = workoutRepo.startWorkout(now = t0)
+        workoutRepo.addSet(original, exerciseId, 50.0, 10, now = t0 + min)
+        workoutRepo.finishWorkout(original)
+        val repeated = workoutRepo.repeatWorkout(original).single()
+        val vm = createVm(repeated.id)
+        backgroundScope.launch { vm.exerciseGroups.collect {} }
+        advanceUntilIdle()
+        assertThat(vm.exerciseGroups.value).hasSize(1)
+        assertThat(vm.exerciseGroups.value.single().exerciseId).isEqualTo(exerciseId)
+        assertThat(vm.exerciseGroups.value.single().sets).isEmpty()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(repeated.id)).isEmpty()
+    }
+
+    @Test
+    fun groupFinish_recordsOnlyExplicitWeightsForCorrectAthlete() = runTest {
+        db.athleteDao().insert(Athlete(id = 1, name = "Я"))
+        db.athleteDao().insert(Athlete(id = 2, name = "Друг"))
+        val members = workoutRepo.startGroupWorkout(listOf(1, 2))
+        val vm = createVm(members.first().id)
+        var closed = 0
+        vm.finishGroup(mapOf(2L to 71.5)) { closed++ }
+        vm.finishGroup(mapOf(1L to 80.0)) { closed++ }
+        advanceUntilIdle()
+        assertThat(closed).isEqualTo(1)
+        assertThat(db.workoutDao().getById(members.first().id)!!.bodyWeightKg).isNull()
+        val friend = db.workoutDao().getById(members.first { it.athleteId == 2L }.id)!!
+        assertThat(friend.bodyWeightKg).isEqualTo(71.5)
+        assertThat(db.weightDao().getAllOnce(2L).single().weightKg).isEqualTo(71.5)
+        assertThat(db.weightDao().getAllOnce(1L)).isEmpty()
+    }
+
+    @Test
+    fun individualFinish_keepsFriendsWorkoutActive() = runTest {
+        db.athleteDao().insert(Athlete(id = 1, name = "Я"))
+        db.athleteDao().insert(Athlete(id = 2, name = "Друг"))
+        val members = workoutRepo.startGroupWorkout(listOf(1, 2))
+        val mine = members.first { it.athleteId == 1L }
+        val friend = members.first { it.athleteId == 2L }
+        val vm = createVm(mine.id)
+        var closed = false
+        vm.finishWorkout(null) { closed = true }
+        advanceUntilIdle()
+        assertThat(closed).isTrue()
+        assertThat(db.workoutDao().getById(mine.id)!!.endedAt).isNotNull()
+        assertThat(db.workoutDao().getById(friend.id)!!.endedAt).isNull()
+        assertThat(db.workoutDao().getById(friend.id)!!.groupSessionId).isEqualTo(mine.groupSessionId)
     }
 }

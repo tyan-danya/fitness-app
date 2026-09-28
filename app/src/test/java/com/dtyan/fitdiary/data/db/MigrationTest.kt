@@ -201,7 +201,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         try {
@@ -311,7 +311,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         try {
@@ -361,7 +361,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
             .allowMainThreadQueries()
             .build()
         try {
@@ -377,5 +377,60 @@ class MigrationTest {
         } finally {
             db.close()
         }
+    }
+
+    @Test
+    fun roomOpens_v4File_preservesOwnershipMeasurementsAndRepairsDuplicateIndices() = runTest {
+        val old = createV1DatabaseWithData()
+        AppDatabase.MIGRATION_1_2.migrate(old)
+        AppDatabase.MIGRATION_2_3.migrate(old)
+        AppDatabase.MIGRATION_3_4.migrate(old)
+        old.execSQL("UPDATE exercises SET photoPath = 'exercise-legacy.jpg' WHERE id = 1")
+        old.execSQL("INSERT INTO workout_sets (id, workoutId, exerciseId, setIndex, weightKg, reps, completedAt) VALUES (2, 1, 1, 3, 105.0, 5, 2000), (3, 1, 1, 3, 110.0, 3, 2500)")
+        old.execSQL("INSERT INTO weight_entries (id, timestamp, weightKg, fromWorkout) VALUES (1, 5000, 82.5, 1), (2, 5000, 82.5, 0)")
+        old.execSQL("INSERT INTO body_measurements (id, epochDay, timestamp, type, valueCm, note) VALUES (1, 20000, 5000, 'WAIST', 91.5, 'Старый замер')")
+        old.version = 4
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_4_5)
+            .allowMainThreadQueries().build()
+        try {
+            assertThat(db.athleteDao().getById(1)!!.name).isEqualTo("Я")
+            assertThat(db.workoutDao().getById(1)!!.athleteId).isEqualTo(1L)
+            assertThat(db.mealDao().getForDayOnce(20000).single().athleteId).isEqualTo(1L)
+            assertThat(db.exerciseDao().getById(1)!!.photoPath).isEqualTo("exercise-legacy.jpg")
+            assertThat(db.exerciseDao().getById(1)!!.weightStepKg).isEqualTo(2.5)
+            val sets = db.workoutSetDao().getForWorkoutOnce(1)
+            assertThat(sets.map { it.id }).containsExactly(1L, 2L, 3L).inOrder()
+            assertThat(sets.map { it.setIndex }).containsExactly(1, 2, 3).inOrder()
+            assertThat(sets.map { it.weightKg }).containsExactly(100.0, 105.0, 110.0).inOrder()
+            val weights = db.weightDao().getAllOnce()
+            assertThat(weights.first().sourceWorkoutId).isEqualTo(1L)
+            assertThat(weights.last().sourceWorkoutId).isNull()
+            val measurement = db.measurementDao().getAllOnce().single()
+            assertThat(measurement.athleteId).isEqualTo(1L)
+            assertThat(measurement.valueCm).isEqualTo(91.5)
+            assertThat(measurement.note).isEqualTo("Старый замер")
+            assertThat(db.workoutDao().plannedExerciseIds(1)).containsExactly(1L)
+        } finally { db.close() }
+    }
+
+    @Test
+    fun roomOpens_v3File_keepsLegacyHistoryWhenUpgradingThroughV4ToV5() = runTest {
+        val old = createV1DatabaseWithData()
+        AppDatabase.MIGRATION_1_2.migrate(old)
+        AppDatabase.MIGRATION_2_3.migrate(old)
+        old.version = 3
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5)
+            .allowMainThreadQueries().build()
+        try {
+            assertThat(db.athleteDao().getActiveOnce().single().id).isEqualTo(1L)
+            assertThat(db.workoutDao().getAllFinishedOnce().single().bodyWeightKg).isEqualTo(82.5)
+            assertThat(db.mealDao().getForDayOnce(20000).single().name).isEqualTo("Курица")
+            assertThat(db.measurementDao().getAllOnce()).isEmpty()
+        } finally { db.close() }
     }
 }

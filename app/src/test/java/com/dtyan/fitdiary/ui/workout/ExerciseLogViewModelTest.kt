@@ -2,22 +2,18 @@ package com.dtyan.fitdiary.ui.workout
 
 import android.content.Context
 import androidx.room.Room
+import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
-import com.dtyan.fitdiary.data.RestTimerController
-import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Exercise
+import com.dtyan.fitdiary.data.db.Athlete
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.ui.common.Format
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asExecutor
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -30,12 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/**
- * Тесты ExerciseLogViewModel поверх реальной in-memory Room-БД, реального
- * SettingsStore и RestTimerController на тестовом планировщике (виртуальное
- * время). Проверка «таймер стартовал» делается через runCurrent(), потому что
- * advanceUntilIdle() промотал бы весь отсчёт до конца (state снова null).
- */
+/** Реальная Room-БД: префилл, изоляция участников, черновики и точная отмена записи. */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 class ExerciseLogViewModelTest {
@@ -46,9 +37,6 @@ class ExerciseLogViewModelTest {
     private lateinit var db: AppDatabase
     private lateinit var workoutRepo: WorkoutRepository
     private lateinit var exerciseRepo: ExerciseRepository
-    private lateinit var settingsStore: SettingsStore
-    private lateinit var timerScope: CoroutineScope
-    private lateinit var restTimer: RestTimerController
 
     /** Фиксированное время: 2026-08-01T10:00 Europe/Moscow. */
     private val t0: Long = ZonedDateTime
@@ -69,14 +57,10 @@ class ExerciseLogViewModelTest {
             .build()
         workoutRepo = WorkoutRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
         exerciseRepo = ExerciseRepository(db.exerciseDao(), db.workoutSetDao())
-        settingsStore = SettingsStore(context)
-        timerScope = CoroutineScope(SupervisorJob() + mainRule.dispatcher)
-        restTimer = RestTimerController(scope = timerScope, onFinished = {})
     }
 
     @After
     fun tearDown() {
-        timerScope.cancel()
         db.close()
     }
 
@@ -88,8 +72,6 @@ class ExerciseLogViewModelTest {
         exerciseId = exerciseId,
         workoutRepository = workoutRepo,
         exerciseRepository = exerciseRepo,
-        settingsStore = settingsStore,
-        restTimer = restTimer,
     )
 
     /** Прошлая завершённая тренировка: 100×5, затем 112,5×3. Возвращает её id. */
@@ -161,53 +143,24 @@ class ExerciseLogViewModelTest {
     // ---------- addSet ----------
 
     @Test
-    fun addSet_appearsInTodaySets_andStartsRestTimerWhenEnabled() = runTest {
+    fun addSet_doubleTap_recordsOneSetWithSnapshotValues() = runTest {
         val e = exercise()
         val w = workoutRepo.startWorkout(now = t0)
         val vm = createVm(w, e)
-        backgroundScope.launch { vm.todaySets.collect { } }
         advanceUntilIdle()
-        assertThat(restTimer.state.value).isNull()
-
-        vm.onWeightTextChange("62,5") // запятая в поле веса
+        vm.onWeightTextChange("62,5")
         vm.onRepsTextChange("5")
-        vm.addSet()
-        // runCurrent: выполняет цепочку addSet, но не проматывает отсчёт таймера.
-        runCurrent()
-
-        val today = vm.todaySets.value
-        assertThat(today).hasSize(1)
-        assertThat(today.single().weightKg).isEqualTo(62.5)
-        assertThat(today.single().reps).isEqualTo(5)
-        assertThat(today.single().setIndex).isEqualTo(1)
-
-        // Таймер пошёл с настройкой по умолчанию (90 с, включён).
-        val timer = restTimer.state.value
-        assertThat(timer).isNotNull()
-        assertThat(timer!!.totalSeconds).isEqualTo(90)
-        assertThat(timer.remainingSeconds).isEqualTo(90)
-    }
-
-    @Test
-    fun addSet_restTimerDisabled_timerDoesNotStart() = runTest {
-        val e = exercise()
-        val w = workoutRepo.startWorkout(now = t0)
-        val vm = createVm(w, e)
-        backgroundScope.launch { vm.todaySets.collect { } }
+        var callbacks = 0
+        vm.addSet { callbacks++ }
+        vm.onWeightTextChange("100")
+        vm.addSet { callbacks++ }
         advanceUntilIdle()
-
-        vm.setRestTimerEnabled(false)
-        vm.onWeightTextChange("50")
-        vm.onRepsTextChange("5")
-        vm.addSet()
-        advanceUntilIdle()
-
-        assertThat(restTimer.state.value).isNull()
-        // Сам подход при этом записан.
-        assertThat(vm.todaySets.value).hasSize(1)
-        assertThat(db.workoutSetDao().getForWorkoutOnce(w)).hasSize(1)
+        val rows = db.workoutSetDao().getForWorkoutOnce(w)
+        assertThat(rows).hasSize(1)
+        assertThat(rows.single().weightKg).isEqualTo(62.5)
+        assertThat(callbacks).isEqualTo(1)
+        assertThat(vm.uiState.value.saving).isFalse()
     }
-
     @Test
     fun addSet_veryFirstSetInHistory_noPrEvent() = runTest {
         val e = exercise()
@@ -241,6 +194,7 @@ class ExerciseLogViewModelTest {
         vm.onRepsTextChange("2")
         vm.addSet()
         advanceUntilIdle()
+        runCurrent() // Deliver the buffered PR event to the background collector.
 
         assertThat(prEvents).hasSize(1)
         // recordWeightKg обновился после более тяжёлого подхода.
@@ -251,6 +205,7 @@ class ExerciseLogViewModelTest {
         vm.onRepsTextChange("5")
         vm.addSet()
         advanceUntilIdle()
+        runCurrent()
         assertThat(prEvents).hasSize(1)
         assertThat(vm.uiState.value.recordWeightKg).isEqualTo(120.0)
     }
@@ -301,5 +256,63 @@ class ExerciseLogViewModelTest {
         vm.onRepsTextChange("")
         vm.bumpReps(-1)
         assertThat(vm.repsText.value).isEqualTo("1")
+    }
+
+    @Test
+    fun participants_keepOwnPrefillDraftAndUndoTarget() = runTest {
+        db.athleteDao().insert(Athlete(id = 1, name = "Я"))
+        db.athleteDao().insert(Athlete(id = 2, name = "Друг"))
+        val e = exercise()
+        val firstHistory = workoutRepo.startWorkout(now = t0, athleteId = 1)
+        workoutRepo.addSet(firstHistory, e, 100.0, 5)
+        workoutRepo.finishWorkout(firstHistory)
+        val friendHistory = workoutRepo.startWorkout(now = t0, athleteId = 2)
+        workoutRepo.addSet(friendHistory, e, 40.0, 12)
+        workoutRepo.finishWorkout(friendHistory)
+        val members = workoutRepo.startGroupWorkout(listOf(1, 2))
+        val mine = createVm(members.first { it.athleteId == 1L }.id, e)
+        val friend = createVm(members.first { it.athleteId == 2L }.id, e)
+        advanceUntilIdle()
+        assertThat(mine.weightText.value).isEqualTo("100")
+        assertThat(friend.weightText.value).isEqualTo("40")
+        assertThat(friend.uiState.value.recordWeightKg).isEqualTo(40.0)
+        mine.onWeightTextChange("105")
+        friend.onWeightTextChange("42,5")
+        var saved: com.dtyan.fitdiary.data.db.WorkoutSet? = null
+        mine.addSet { saved = it }
+        friend.addSet()
+        advanceUntilIdle()
+        mine.deleteSet(saved!!)
+        advanceUntilIdle()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(members.first { it.athleteId == 1L }.id)).isEmpty()
+        val friendsSets = db.workoutSetDao().getForWorkoutOnce(members.first { it.athleteId == 2L }.id)
+        assertThat(friendsSets).hasSize(1)
+        assertThat(friendsSets.single().weightKg).isEqualTo(42.5)
+        assertThat(mine.weightText.value).isEqualTo("105")
+    }
+
+    @Test
+    fun restoredDraft_isNotOverwrittenByHistoryPrefill() = runTest {
+        val e = exercise()
+        val w = workoutRepo.startWorkout(now = t0)
+        val handle = SavedStateHandle(mapOf("weight" to "37,5", "reps" to "7", "touched" to true))
+        val vm = ExerciseLogViewModel(w, e, workoutRepo, exerciseRepo, handle)
+        advanceUntilIdle()
+        assertThat(vm.weightText.value).isEqualTo("37,5")
+        assertThat(vm.repsText.value).isEqualTo("7")
+    }
+
+    @Test
+    fun nonFiniteWeight_doesNotRecordOrCallSuccess() = runTest {
+        val e = exercise()
+        val w = workoutRepo.startWorkout(now = t0)
+        val vm = createVm(w, e)
+        advanceUntilIdle()
+        vm.onWeightTextChange("Infinity")
+        var called = false
+        vm.addSet { called = true }
+        advanceUntilIdle()
+        assertThat(called).isFalse()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(w)).isEmpty()
     }
 }

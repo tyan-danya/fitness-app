@@ -10,6 +10,9 @@ import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.domain.Calculations
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -48,17 +51,41 @@ class HomeViewModel(
     val latestWeight: StateFlow<WeightEntry?> = statsRepository.observeLatestWeight()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private var starting = false
+    private val _starting = MutableStateFlow(false)
+    val starting = _starting.asStateFlow()
+    private val _error = MutableStateFlow<String?>(null)
+    val error = _error.asStateFlow()
 
     /** Старт тренировки (или продолжение уже активной — репозиторий идемпотентен). */
     fun startWorkout(onStarted: (Long) -> Unit) {
-        if (starting) return
-        starting = true
+        val owner = workoutRepository.currentAthleteId
+        start(onStarted) { workoutRepository.startWorkout(athleteId = owner) }
+    }
+
+    fun startTogether(athleteIds: List<Long>, onStarted: (Long) -> Unit) {
+        val ids = athleteIds.toList()
+        start(onStarted) { workoutRepository.startGroupWorkout(ids).first().id }
+    }
+
+    fun repeatWorkout(sourceWorkoutId: Long, athleteIds: List<Long>, onStarted: (Long) -> Unit) {
+        val ids = athleteIds.toList()
+        start(onStarted) { workoutRepository.repeatWorkout(sourceWorkoutId, ids).first().id }
+    }
+
+    private fun start(onStarted: (Long) -> Unit, action: suspend () -> Long) {
+        if (_starting.value) return
+        _starting.value = true
+        _error.value = null
         viewModelScope.launch {
             try {
-                onStarted(workoutRepository.startWorkout())
+                onStarted(action())
+            } catch (e: CancellationException) { throw e }
+            catch (e: IllegalArgumentException) {
+                _error.value = e.message ?: "Не удалось начать тренировку. Проверьте участников."
+            } catch (_: Exception) {
+                _error.value = "Не удалось начать тренировку. Попробуйте ещё раз."
             } finally {
-                starting = false
+                _starting.value = false
             }
         }
     }

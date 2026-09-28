@@ -1,178 +1,141 @@
 package com.dtyan.fitdiary.ui.workout
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.dtyan.fitdiary.data.RestTimerController
-import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.ui.common.Format
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class ExerciseLogUiState(
     val exerciseName: String = "",
     val muscleGroup: String = "",
-    /** Исторический рекорд веса по упражнению; null — подходов ещё не было. */
     val recordWeightKg: Double? = null,
-    /** Подходы прошлой тренировки с этим упражнением. */
     val previousSets: List<WorkoutSet> = emptyList(),
-    /** Дата прошлой тренировки, уже отформатированная («5 июля»). */
     val previousDateText: String? = null,
-    /** Прошлые данные загружены (чтобы не мигать надписью «впервые»). */
     val previousLoaded: Boolean = false,
-    /** Фото тренажёра: путь относительно filesDir; null — фото нет. */
     val photoPath: String? = null,
-    /** Вид оборудования упражнения («Тренажёр», «Штанга»…). */
     val equipment: String = "",
+    val weightStepKg: Double = 2.5,
+    val saving: Boolean = false,
+    val error: String? = null,
 )
 
+/** One immutable workout/athlete + exercise identity; drafts cannot leak between participants. */
 class ExerciseLogViewModel(
     private val workoutId: Long,
     private val exerciseId: Long,
     private val workoutRepository: WorkoutRepository,
     private val exerciseRepository: ExerciseRepository,
-    private val settingsStore: SettingsStore,
-    private val restTimer: RestTimerController,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
-
     private val _uiState = MutableStateFlow(ExerciseLogUiState())
     val uiState: StateFlow<ExerciseLogUiState> = _uiState.asStateFlow()
-
-    /** Подходы текущей тренировки по этому упражнению. */
-    val todaySets: StateFlow<List<WorkoutSet>> =
-        workoutRepository.observeSetsForExercise(workoutId, exerciseId)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val settings: StateFlow<SettingsStore.Settings> = settingsStore.settings
-
-    private val _weightText = MutableStateFlow("")
-    val weightText: StateFlow<String> = _weightText.asStateFlow()
-
-    private val _repsText = MutableStateFlow("")
-    val repsText: StateFlow<String> = _repsText.asStateFlow()
-
-    /** Одноразовые события «новый личный рекорд» для снекбара. */
+    val todaySets = workoutRepository.observeSetsForExercise(workoutId, exerciseId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val weightText = savedStateHandle.getStateFlow("weight", "")
+    val repsText = savedStateHandle.getStateFlow("reps", "")
     private val _prEvents = Channel<Unit>(Channel.BUFFERED)
-    val prEvents: Flow<Unit> = _prEvents.receiveAsFlow()
-
-    /** Пользователь уже трогал поля ввода — префилл их не перетирает. */
-    private var inputTouched = false
+    val prEvents = _prEvents.receiveAsFlow()
 
     init {
         viewModelScope.launch {
-            val exercise = exerciseRepository.getById(exerciseId)
-            val record = workoutRepository.maxWeight(exerciseId)
-            val previous = workoutRepository.previousWorkoutSets(exerciseId, workoutId)
-            val previousDate = previous.firstOrNull()
-                ?.let { workoutRepository.getWorkoutOnce(it.workoutId)?.startedAt }
-                ?.let { Format.dateShort(Format.local(it).toLocalDate()) }
-            _uiState.update {
-                it.copy(
-                    exerciseName = exercise?.name.orEmpty(),
-                    muscleGroup = exercise?.muscleGroup.orEmpty(),
-                    photoPath = exercise?.photoPath,
-                    equipment = exercise?.equipment.orEmpty(),
+            try {
+                val exercise = exerciseRepository.getById(exerciseId)
+                val previous = workoutRepository.previousWorkoutSets(exerciseId, workoutId)
+                val date = previous.firstOrNull()?.let { workoutRepository.getWorkoutOnce(it.workoutId) }
+                    ?.startedAt?.let { Format.dateShort(Format.local(it).toLocalDate()) }
+                val record = workoutRepository.maxWeight(exerciseId, workoutId)
+                _uiState.update { it.copy(
+                    exerciseName = exercise?.name.orEmpty(), muscleGroup = exercise?.muscleGroup.orEmpty(),
+                    photoPath = exercise?.photoPath, equipment = exercise?.equipment.orEmpty(),
+                    weightStepKg = exercise?.weightStepKg ?: 2.5,
                     recordWeightKg = record,
-                    previousSets = previous,
-                    previousDateText = previousDate,
-                    previousLoaded = true,
-                )
-            }
-            if (!inputTouched) {
+                    previousSets = previous, previousDateText = date, previousLoaded = true,
+                ) }
                 val prefill = workoutRepository.lastSetForPrefill(workoutId, exerciseId)
-                _weightText.value = Format.weight(prefill?.weightKg ?: 20.0)
-                _repsText.value = (prefill?.reps ?: 10).toString()
-            }
+                if (savedStateHandle.get<Boolean>("touched") != true) {
+                    savedStateHandle["weight"] = Format.weight(prefill?.weightKg ?: 20.0)
+                    savedStateHandle["reps"] = (prefill?.reps ?: 10).toString()
+                }
+                exerciseRepository.observeExercises().collect { exercises ->
+                    exercises.firstOrNull { it.id == exerciseId }?.let { current ->
+                        _uiState.update { it.copy(exerciseName = current.name, photoPath = current.photoPath,
+                            equipment = current.equipment, weightStepKg = current.weightStepKg) }
+                    }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось загрузить упражнение. Откройте его ещё раз.") } }
         }
     }
 
-    fun onWeightTextChange(text: String) {
-        inputTouched = true
-        _weightText.value = text
-    }
+    fun onWeightTextChange(text: String) { savedStateHandle["touched"] = true; savedStateHandle["weight"] = text }
+    fun onRepsTextChange(text: String) { savedStateHandle["touched"] = true; savedStateHandle["reps"] = text }
+    fun bumpWeight(delta: Double) = onWeightTextChange(Format.weight(
+        ((weightText.value.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0) + delta).coerceAtLeast(0.0)))
+    fun bumpReps(delta: Int) = onRepsTextChange(((repsText.value.toIntOrNull() ?: 0).toLong() + delta).coerceIn(1, 999).toString())
+    fun repeatPrevious() { _uiState.value.previousSets.lastOrNull()?.let {
+        onWeightTextChange(Format.weight(it.weightKg)); onRepsTextChange(it.reps.toString())
+    } }
 
-    fun onRepsTextChange(text: String) {
-        inputTouched = true
-        _repsText.value = text
-    }
-
-    /** Шаг веса ±2,5 кг от текущего значения поля. */
-    fun bumpWeight(delta: Double) {
-        inputTouched = true
-        val current = _weightText.value.replace(',', '.').toDoubleOrNull() ?: 0.0
-        _weightText.value = Format.weight((current + delta).coerceAtLeast(0.0))
-    }
-
-    /** Шаг повторов ±1, не меньше одного. */
-    fun bumpReps(delta: Int) {
-        inputTouched = true
-        val current = _repsText.value.toIntOrNull() ?: 0
-        _repsText.value = (current + delta).coerceAtLeast(1).toString()
-    }
-
-    fun addSet() {
-        val weight = _weightText.value.replace(',', '.').toDoubleOrNull() ?: return
-        val reps = _repsText.value.toIntOrNull() ?: return
-        if (weight < 0 || reps < 1) return
+    /** Lock before launch; callback receives the exact persisted set for Undo. */
+    fun addSet(onSaved: (WorkoutSet) -> Unit = {}) {
+        val weight = weightText.value.replace(',', '.').toDoubleOrNull() ?: return
+        val reps = repsText.value.toIntOrNull() ?: return
+        if (!weight.isFinite() || weight !in 0.0..2000.0 || reps !in 1..999 || _uiState.value.saving) return
+        _uiState.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
-            val result = workoutRepository.addSet(workoutId, exerciseId, weight, reps)
-            refreshRecord()
-            val current = settingsStore.settings.value
-            if (current.restTimerEnabled) {
-                restTimer.start(current.restTimerSeconds)
-            }
-            if (result.isWeightPr || result.isE1RmPr) {
-                _prEvents.send(Unit)
-            }
+            try {
+                val result = workoutRepository.addSet(workoutId, exerciseId, weight, reps)
+                refreshRecord()
+                if (result.isWeightPr || result.isE1RmPr) _prEvents.send(Unit)
+                onSaved(result.set)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Подход не записан. Попробуйте ещё раз.") } }
+            finally { _uiState.update { it.copy(saving = false) } }
         }
     }
 
     fun updateSet(set: WorkoutSet, weightKg: Double, reps: Int) {
-        if (weightKg < 0 || reps < 1) return
-        viewModelScope.launch {
-            workoutRepository.updateSet(set.copy(weightKg = weightKg, reps = reps))
-            refreshRecord()
-        }
+        if (set.workoutId != workoutId || set.exerciseId != exerciseId || !weightKg.isFinite() || weightKg !in 0.0..2000.0 || reps !in 1..999) return
+        mutate { workoutRepository.updateSet(set.copy(weightKg = weightKg, reps = reps)); refreshRecord() }
     }
-
     fun deleteSet(set: WorkoutSet) {
+        if (set.workoutId != workoutId || set.exerciseId != exerciseId) return
+        // Undo targets an immutable row ID and remains valid while another set is saving.
         viewModelScope.launch {
-            workoutRepository.deleteSet(set)
-            refreshRecord()
+            try { workoutRepository.deleteSet(set); refreshRecord() }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось удалить подход. Попробуйте ещё раз.") } }
         }
     }
-
-    /**
-     * Привязать/заменить/убрать (null) фото тренажёра.
-     * Файлы на диске чистит вызывающий через PhotoStore.
-     */
-    fun updatePhoto(path: String?) {
+    fun updatePhoto(path: String?, onSaved: () -> Unit = {}) = mutate {
+        val exercise = exerciseRepository.getById(exerciseId) ?: return@mutate
+        exerciseRepository.updatePhoto(exercise, path)
+        _uiState.update { it.copy(photoPath = path) }
+        onSaved()
+    }
+    fun setWeightStep(step: Double) = mutate {
+        exerciseRepository.updateWeightStep(exerciseId, step)
+        _uiState.update { it.copy(weightStepKg = step) }
+    }
+    private fun mutate(action: suspend () -> Unit) {
+        if (_uiState.value.saving) return
+        _uiState.update { it.copy(saving = true, error = null) }
         viewModelScope.launch {
-            val exercise = exerciseRepository.getById(exerciseId) ?: return@launch
-            exerciseRepository.updatePhoto(exercise, path)
-            _uiState.update { it.copy(photoPath = path) }
+            try { action() }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось сохранить изменение. Попробуйте ещё раз.") } }
+            finally { _uiState.update { it.copy(saving = false) } }
         }
     }
-
-    fun setRestTimerEnabled(enabled: Boolean) {
-        settingsStore.update { it.copy(restTimerEnabled = enabled) }
-    }
-
-    fun setRestTimerSeconds(seconds: Int) {
-        settingsStore.update { it.copy(restTimerSeconds = seconds) }
-    }
-
     private suspend fun refreshRecord() {
-        _uiState.update { it.copy(recordWeightKg = workoutRepository.maxWeight(exerciseId)) }
+        val record = workoutRepository.maxWeight(exerciseId, workoutId)
+        _uiState.update { it.copy(recordWeightKg = record) }
     }
 }

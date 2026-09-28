@@ -1,0 +1,5 @@
+# Copy to signing.properties (ignored by Git). Preserve your installed app's signing key.
+storeFile=/absolute/path/to/private-release.jks
+storePassword=replace-locally
+keyAlias=replace-locally
+keyPassword=replace-locally

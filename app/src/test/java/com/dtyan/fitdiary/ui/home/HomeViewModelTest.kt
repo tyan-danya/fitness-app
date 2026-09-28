@@ -5,6 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
 import com.dtyan.fitdiary.data.db.AppDatabase
+import com.dtyan.fitdiary.data.db.Athlete
+import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.google.common.truth.Truth.assertThat
@@ -57,6 +59,30 @@ class HomeViewModelTest {
     }
 
     private fun createVm() = HomeViewModel(workoutRepo, statsRepo)
+
+    @Test
+    fun friendsJoinExistingWorkout_keepsItsIdSetsAndExistingMembers() = runTest {
+        db.athleteDao().insert(Athlete(id = 1, name = "Я"))
+        db.athleteDao().insert(Athlete(id = 2, name = "Друг"))
+        db.athleteDao().insert(Athlete(id = 3, name = "Ещё друг"))
+        val exerciseId = db.exerciseDao().insert(Exercise(name = "Жим", muscleGroup = "Грудь"))
+        val original = workoutRepo.startWorkout()
+        workoutRepo.addSet(original, exerciseId, 60.0, 8)
+        val vm = createVm()
+        var opened = -1L
+        vm.startTogether(listOf(1, 2)) { opened = it }
+        advanceUntilIdle()
+        assertThat(opened).isEqualTo(original)
+        val friendWorkout = db.workoutDao().getActiveOnce(2)!!
+        val groupId = friendWorkout.groupSessionId
+        // A subsequent join retains earlier members even if they are not listed again.
+        vm.startTogether(listOf(1, 3)) { opened = it }
+        advanceUntilIdle()
+        assertThat(opened).isEqualTo(original)
+        assertThat(db.workoutSetDao().getForWorkoutOnce(original).single().weightKg).isEqualTo(60.0)
+        assertThat(db.workoutDao().getActiveOnce(2)!!.id).isEqualTo(friendWorkout.id)
+        assertThat(db.workoutDao().getActiveOnce(3)!!.groupSessionId).isEqualTo(groupId)
+    }
 
     /** Завершённая тренировка: старт [startedAt], финиш через полчаса. */
     private suspend fun finishedWorkout(startedAt: Long): Long {

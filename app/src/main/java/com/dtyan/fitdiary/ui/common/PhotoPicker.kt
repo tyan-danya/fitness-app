@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.dtyan.fitdiary.appContainer
@@ -33,7 +34,8 @@ private fun cameraUriFor(context: Context): Uri {
 fun rememberPhotoPicker(onPicked: (Uri) -> Unit): PhotoPickerHandle {
     val context = LocalContext.current
     val currentOnPicked by rememberUpdatedState(onPicked)
-    val pendingCameraUri = remember { mutableStateOf<Uri?>(null) }
+    // String is Bundle-safe even when the activity/process is recreated in Camera.
+    val pendingCameraUri = rememberSaveable { mutableStateOf<String?>(null) }
 
     val gallery = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -42,7 +44,7 @@ fun rememberPhotoPicker(onPicked: (Uri) -> Unit): PhotoPickerHandle {
     val camera = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
-        val uri = pendingCameraUri.value
+        val uri = pendingCameraUri.value?.let(Uri::parse)
         if (success && uri != null) currentOnPicked(uri)
         pendingCameraUri.value = null
     }
@@ -55,7 +57,7 @@ fun rememberPhotoPicker(onPicked: (Uri) -> Unit): PhotoPickerHandle {
         },
         launchCamera = {
             val uri = cameraUriFor(context)
-            pendingCameraUri.value = uri
+            pendingCameraUri.value = uri.toString()
             camera.launch(uri)
         },
     )

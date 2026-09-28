@@ -3,13 +3,23 @@
 #                 .\build.ps1 assembleDebug
 param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $GradleArgs)
 
-$env:JAVA_HOME = 'G:\toolchain\jdk\jdk-17.0.19+10'
-$env:ANDROID_HOME = 'G:\toolchain\android-sdk'
-$env:ANDROID_SDK_ROOT = 'G:\toolchain\android-sdk'
-$env:GRADLE_USER_HOME = 'G:\toolchain\gradle-home'
-$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+if (-not $env:JAVA_HOME -and (Test-Path 'G:\toolchain\jdk\jdk-17.0.19+10')) {
+    $env:JAVA_HOME = 'G:\toolchain\jdk\jdk-17.0.19+10'
+}
+if (-not $env:ANDROID_HOME -and (Test-Path 'G:\toolchain\android-sdk')) {
+    $env:ANDROID_HOME = 'G:\toolchain\android-sdk'
+}
+if ($env:ANDROID_HOME) { $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME }
+if (-not $env:GRADLE_USER_HOME -and (Test-Path 'G:\toolchain\gradle-home')) {
+    $env:GRADLE_USER_HOME = 'G:\toolchain\gradle-home'
+}
+if ($env:JAVA_HOME) { $env:Path = "$env:JAVA_HOME\bin;$env:Path" }
 
 if (-not $GradleArgs) { $GradleArgs = @('tasks') }
 
-& 'G:\toolchain\gradle\gradle-8.11.1\bin\gradle.bat' -p 'G:\projects\fitness-app' @GradleArgs
+if (($GradleArgs -join ' ') -match 'assembleRelease|bundleRelease' -and
+    -not (Test-Path (Join-Path $PSScriptRoot 'signing.properties')) -and -not $env:FITDIARY_KEYSTORE) {
+    throw 'Настройте локальную подпись: signing.properties.example → signing.properties либо FITDIARY_KEYSTORE и остальные FITDIARY_* переменные.'
+}
+& (Join-Path $PSScriptRoot 'gradlew.bat') -p $PSScriptRoot @GradleArgs
 exit $LASTEXITCODE

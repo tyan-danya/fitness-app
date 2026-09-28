@@ -15,6 +15,7 @@ import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.export.ExportManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,7 +90,7 @@ class StatsViewModel(
 
     // Смена месяца или завершение тренировки перезагружают данные календаря
     val calendar: StateFlow<CalendarUiState> =
-        combine(_month, workoutRepository.observeFinishedSummaries()) { m, _ -> m }
+        combine(_month, workoutRepository.observeFinishedSummaries(), nutritionRepository.observeAllMeals()) { m, _, _ -> m }
             .transformLatest { m -> emit(loadCalendar(m)) }
             .stateIn(viewModelScope, started, CalendarUiState())
 
@@ -97,13 +98,14 @@ class StatsViewModel(
     fun nextMonth() { _month.value = _month.value.plusMonths(1) }
 
     private suspend fun loadCalendar(month: YearMonth): CalendarUiState {
+        val owner = statsRepository.currentAthleteId
         val fromMillis = month.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
         val toMillis = month.atEndOfMonth().plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() - 1
-        val workoutDays = statsRepository.workoutStartTimesBetween(fromMillis, toMillis)
+        val workoutDays = statsRepository.workoutStartTimesBetween(fromMillis, toMillis, owner)
             .map { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
             .toSet()
         val mealDays = nutritionRepository
-            .daysWithMeals(month.atDay(1).toEpochDay(), month.atEndOfMonth().toEpochDay())
+            .daysWithMeals(month.atDay(1).toEpochDay(), month.atEndOfMonth().toEpochDay(), owner)
             .map { LocalDate.ofEpochDay(it) }
             .toSet()
         return CalendarUiState(workoutDays = workoutDays, mealDays = mealDays)
@@ -116,7 +118,9 @@ class StatsViewModel(
         .stateIn(viewModelScope, started, WeightUiState())
 
     fun addWeight(weightKg: Double) {
-        viewModelScope.launch { statsRepository.addWeightEntry(weightKg) }
+        val owner = statsRepository.currentAthleteId
+        val timestamp = System.currentTimeMillis()
+        viewModelScope.launch { statsRepository.addWeightEntry(weightKg, now = timestamp, athleteId = owner) }
     }
 
     private fun buildWeightState(entries: List<WeightEntry>, now: Long): WeightUiState {
@@ -160,7 +164,8 @@ class StatsViewModel(
     private val _selectedExercise = MutableStateFlow<Exercise?>(null)
     val selectedExercise: StateFlow<Exercise?> = _selectedExercise.asStateFlow()
 
-    val exerciseProgress: StateFlow<ExerciseProgressUiState?> = _selectedExercise
+    val exerciseProgress: StateFlow<ExerciseProgressUiState?> =
+        combine(_selectedExercise, workoutRepository.observeFinishedSummaries()) { exercise, _ -> exercise }
         .transformLatest { exercise ->
             if (exercise == null) {
                 emit(null)
@@ -200,17 +205,24 @@ class StatsViewModel(
     private val _exportIntents = Channel<Intent>(Channel.BUFFERED)
     /** Готовые share-интенты: composable запускает их через context.startActivity. */
     val exportIntents: Flow<Intent> = _exportIntents.receiveAsFlow()
+    private val _errors = Channel<String>(Channel.BUFFERED)
+    val errors: Flow<String> = _errors.receiveAsFlow()
 
     fun export(format: ExportFormat) {
         if (_exporting.value) return
+        val owner = statsRepository.currentAthleteId
+        _exporting.value = true
         viewModelScope.launch {
-            _exporting.value = true
             try {
                 val intent = when (format) {
-                    ExportFormat.JSON -> exportManager.exportJson()
-                    ExportFormat.CSV -> exportManager.exportCsv()
+                    ExportFormat.JSON -> exportManager.exportJson(athleteId = owner)
+                    ExportFormat.CSV -> exportManager.exportCsv(athleteId = owner)
                 }
                 _exportIntents.send(intent)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _errors.send(error.message ?: "Не удалось подготовить экспорт")
             } finally {
                 _exporting.value = false
             }

@@ -28,7 +28,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -45,6 +45,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -117,15 +119,22 @@ fun StatsScreen(
 
     var showExportDialog by remember { mutableStateOf(false) }
     var showWeightDialog by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
         vm.exportIntents.collect { intent ->
             showExportDialog = false
-            context.startActivity(intent)
+            try {
+                context.startActivity(intent)
+            } catch (_: android.content.ActivityNotFoundException) {
+                snackbar.showSnackbar("Нет приложения для отправки файла")
+            }
         }
     }
+    LaunchedEffect(vm) { vm.errors.collect { snackbar.showSnackbar(it) } }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         // Отступы системных панелей уже применяет внешний Scaffold в AppRoot — иначе они удвоятся
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
@@ -201,7 +210,7 @@ fun StatsScreen(
             item(key = "progress") {
                 Column {
                     SectionHeader(
-                        icon = Icons.Filled.TrendingUp,
+                        icon = Icons.AutoMirrored.Filled.TrendingUp,
                         title = "Прогресс упражнения",
                         iconTint = fitAccents.stats,
                         iconContainer = fitAccents.statsContainer,
@@ -428,20 +437,20 @@ private fun WeightSectionContent(
     }
 }
 
-/** Пилюля с дельтой веса за 30 дней: снижение — зелёная, рост — красная. */
+/** Changes in body mass are neutral: an increase is not inherently a failure. */
 @Composable
 private fun WeightDeltaChip(delta: Double) {
     val accents = fitAccents
     val (text, container, content) = when {
         delta < -0.049 -> Triple(
             "↓ ${Format.weight(abs(delta))} кг",
-            accents.workoutContainer,
-            accents.workout,
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            MaterialTheme.colorScheme.onSurfaceVariant,
         )
         delta > 0.049 -> Triple(
             "↑ ${Format.weight(delta)} кг",
-            MaterialTheme.colorScheme.errorContainer,
-            MaterialTheme.colorScheme.error,
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            MaterialTheme.colorScheme.onSurfaceVariant,
         )
         else -> Triple(
             "без изменений",

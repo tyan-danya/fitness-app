@@ -127,6 +127,7 @@ fun NutritionScreen() {
     val recent by vm.recent.collectAsStateWithLifecycle()
     val pending by vm.pendingEstimates.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val importPreview by vm.importPreview.collectAsStateWithLifecycle()
 
     var goalsDialogOpen by rememberSaveable { mutableStateOf(false) }
     var aiDialogOpen by rememberSaveable { mutableStateOf(false) }
@@ -145,6 +146,24 @@ fun NutritionScreen() {
                 is NutritionEvent.Message -> snackbar.showSnackbar(event.text)
             }
         }
+    }
+
+    importPreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = { if (!busy) vm.dismissImportPreview() },
+            title = { Text("Применить расчёт?") },
+            text = { Text(buildString {
+                append("Будет обновлено приёмов: ${preview.changes.accepted.size}.")
+                if (preview.changes.conflicts.isNotEmpty()) {
+                    append("\nПропущено изменённых или удалённых: ${preview.changes.conflicts.size}.\n")
+                    append(preview.changes.conflicts.take(5).joinToString("\n"))
+                }
+                append("\nЗначения ИИ приблизительные; их можно исправить после загрузки.")
+            }) },
+            confirmButton = { TextButton(onClick = vm::confirmImport,
+                enabled = !busy && preview.changes.accepted.isNotEmpty()) { Text("Применить") } },
+            dismissButton = { TextButton(onClick = vm::dismissImportPreview, enabled = !busy) { Text("Отмена") } },
+        )
     }
 
     Scaffold(

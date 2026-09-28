@@ -9,6 +9,14 @@ import com.dtyan.fitdiary.domain.MealType
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.dtyan.fitdiary.domain.Per100
 
+/** Локальный спортсмен. Архивирование сохраняет всю его историю. */
+@Entity(tableName = "athletes")
+data class Athlete(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    @ColumnInfo(defaultValue = "0") val isArchived: Boolean = false,
+)
+
 /**
  * Упражнение (тренажёр). Предзаполняется при создании БД, можно добавлять свои.
  * equipment — вид: «Тренажёр», «Штанга», «Гантели», «Блок», «Своё тело», «Другое».
@@ -24,10 +32,11 @@ data class Exercise(
     val photoPath: String? = null,
     val isCustom: Boolean = false,
     val isArchived: Boolean = false,
+    @ColumnInfo(defaultValue = "2.5") val weightStepKg: Double = 2.5,
 )
 
 /** Тренировка. endedAt == null — активная (идёт прямо сейчас). Времена — epoch millis. */
-@Entity(tableName = "workouts")
+@Entity(tableName = "workouts", indices = [Index("athleteId"), Index("groupSessionId")])
 data class Workout(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val startedAt: Long,
@@ -35,6 +44,8 @@ data class Workout(
     /** Контрольное взвешивание при завершении, кг. */
     val bodyWeightKg: Double? = null,
     val note: String? = null,
+    @ColumnInfo(defaultValue = "1") val athleteId: Long = 1L,
+    val groupSessionId: String? = null,
 )
 
 /** Один подход: вес × повторы. setIndex — номер подхода этого упражнения в этой тренировке (с 1). */
@@ -53,7 +64,7 @@ data class Workout(
             childColumns = ["exerciseId"],
         ),
     ],
-    indices = [Index("workoutId"), Index("exerciseId")],
+    indices = [Index("workoutId"), Index("exerciseId"), Index(value = ["workoutId", "exerciseId", "setIndex"], unique = true)],
 )
 data class WorkoutSet(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -74,7 +85,7 @@ data class WorkoutSet(
  * при заданных servingG и *Per100 итог = per100 × servingG / 100.
  * needsEstimate — КБЖУ ещё не известно, приём ждёт расчёта (ИИ или файл-обмен).
  */
-@Entity(tableName = "meals", indices = [Index("epochDay")])
+@Entity(tableName = "meals", indices = [Index("epochDay"), Index(value = ["athleteId", "epochDay"])])
 data class Meal(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val epochDay: Long,
@@ -93,6 +104,7 @@ data class Meal(
     val carbsPer100: Double? = null,
     @ColumnInfo(defaultValue = "0")
     val needsEstimate: Boolean = false,
+    @ColumnInfo(defaultValue = "1") val athleteId: Long = 1L,
 ) {
     /** Значения на 100 г, если приём вводился в этом режиме. */
     val per100: Per100?
@@ -103,19 +115,21 @@ data class Meal(
 }
 
 /** Замер веса тела. fromWorkout — контрольное взвешивание при завершении тренировки. */
-@Entity(tableName = "weight_entries")
+@Entity(tableName = "weight_entries", indices = [Index("athleteId"), Index("sourceWorkoutId")])
 data class WeightEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val timestamp: Long,
     val weightKg: Double,
     val fromWorkout: Boolean = false,
+    @ColumnInfo(defaultValue = "1") val athleteId: Long = 1L,
+    val sourceWorkoutId: Long? = null,
 )
 
 /**
  * Замер тела сантиметровой лентой. epochDay — день замера (LocalDate.toEpochDay()),
  * type — зона (талия, грудь…), valueCm — значение в сантиметрах.
  */
-@Entity(tableName = "body_measurements", indices = [Index("epochDay"), Index("type")])
+@Entity(tableName = "body_measurements", indices = [Index("epochDay"), Index("type"), Index(value = ["athleteId", "epochDay"])])
 data class BodyMeasurement(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val epochDay: Long,
@@ -123,4 +137,17 @@ data class BodyMeasurement(
     val type: MeasurementType,
     val valueCm: Double,
     val note: String? = null,
+    @ColumnInfo(defaultValue = "1") val athleteId: Long = 1L,
 )
+
+/** План упражнений хранится отдельно: повтор тренировки не создаёт выполненные подходы. */
+@Entity(
+    tableName = "workout_exercises",
+    primaryKeys = ["workoutId", "exerciseId"],
+    foreignKeys = [
+        ForeignKey(entity = Workout::class, parentColumns = ["id"], childColumns = ["workoutId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Exercise::class, parentColumns = ["id"], childColumns = ["exerciseId"]),
+    ],
+    indices = [Index("exerciseId")],
+)
+data class WorkoutExercise(val workoutId: Long, val exerciseId: Long, val position: Int)

@@ -28,6 +28,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.roundToInt
@@ -101,7 +103,7 @@ data class MealEditorState(
 
     companion object {
         /** Терпимый парсинг: запятая приравнивается к точке, пустое поле = null. */
-        fun parseNumber(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
+        fun parseNumber(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
     }
 }
 
@@ -148,6 +150,16 @@ class NutritionViewModel(
 
     private val _editor = MutableStateFlow<MealEditorState?>(null)
     val editor: StateFlow<MealEditorState?> = _editor.asStateFlow()
+    private var editorGeneration = 0L
+    private var estimateJob: Job? = null
+    private var editorAthleteId = repo.currentAthleteId
+
+    private fun invalidateEstimate() {
+        editorGeneration++
+        estimateJob?.cancel()
+        estimateJob = null
+        _editor.update { it?.copy(estimating = false) }
+    }
 
     private val _events = Channel<NutritionEvent>(Channel.BUFFERED)
     val events: Flow<NutritionEvent> = _events.receiveAsFlow()
@@ -155,6 +167,44 @@ class NutritionViewModel(
     private val _busy = MutableStateFlow(false)
     /** Идёт выгрузка/загрузка файла расчёта. */
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
+    data class ImportPreview(val batch: EstimateExchange.ImportBatch, val changes: NutritionRepository.EstimatePreview)
+    private val _importPreview = MutableStateFlow<ImportPreview?>(null)
+    val importPreview: StateFlow<ImportPreview?> = _importPreview.asStateFlow()
+
+    init {
+        val initialAthlete = repo.currentAthleteId
+        viewModelScope.launch {
+            var selected = initialAthlete
+            repo.activeAthleteId.collect { athlete ->
+                if (athlete != selected) {
+                    selected = athlete
+                    closeEditor()
+                    _recent.value = emptyList()
+                    _importPreview.value = null
+                }
+            }
+        }
+    }
+
+    fun dismissImportPreview() { _importPreview.value = null }
+
+    fun confirmImport() {
+        val preview = _importPreview.value ?: return
+        if (_busy.value) return
+        _busy.value = true
+        viewModelScope.launch {
+            try {
+                require(exchange?.isCurrent(preview.batch) == true) { "Профиль изменился. Загрузите файл повторно." }
+                val applied = repo.applyEstimates(preview.changes.accepted)
+                _importPreview.value = null
+                _events.send(NutritionEvent.Message("Рассчитано: $applied. Конфликтующие приёмы не изменены."))
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) {
+                _importPreview.value = null
+                _events.send(NutritionEvent.Message(e.message ?: "Не удалось применить расчёт"))
+            } finally { _busy.value = false }
+        }
+    }
 
     // --- Выбранный день ---
 
@@ -168,28 +218,42 @@ class NutritionViewModel(
 
     /** Новый приём. type == null — определить по времени (для не-сегодня — полдень → обед). */
     fun openAddEditor(type: MealType? = null) {
+        invalidateEstimate()
+        editorAthleteId = repo.currentAthleteId
         val day = _selectedDay.value
         _editor.value = MealEditorState(
             mealType = type ?: MealType.forTimestamp(newMealTimestamp(day)),
         )
-        viewModelScope.launch { _recent.value = repo.recentMeals(12) }
+        _recent.value = emptyList()
+        val owner = editorAthleteId
+        viewModelScope.launch {
+            val recent = repo.recentMeals(12, owner)
+            if (owner == editorAthleteId && owner == repo.currentAthleteId && _editor.value?.isNew == true) _recent.value = recent
+        }
     }
 
     fun openEditEditor(meal: Meal) {
+        if (meal.athleteId != repo.currentAthleteId) return
+        invalidateEstimate()
+        editorAthleteId = meal.athleteId
         _editor.value = MealEditorState(editing = meal, mealType = meal.mealType).withValuesOf(meal)
     }
 
     fun closeEditor() {
+        invalidateEstimate()
         _editor.value = null
     }
 
-    fun onEditorNameChange(value: String) = _editor.update { it?.copy(name = value, estimateError = null) }
+    fun onEditorNameChange(value: String) {
+        invalidateEstimate()
+        _editor.update { it?.copy(name = value, estimateError = null) }
+    }
     fun onEditorMealTypeChange(type: MealType) = _editor.update { it?.copy(mealType = type) }
     fun onEditorServingChange(value: String) = _editor.update { it?.copy(servingText = value) }
-    fun onEditorCaloriesChange(value: String) = _editor.update { it?.copy(caloriesText = value) }
-    fun onEditorProteinChange(value: String) = _editor.update { it?.copy(proteinText = value) }
-    fun onEditorFatChange(value: String) = _editor.update { it?.copy(fatText = value) }
-    fun onEditorCarbsChange(value: String) = _editor.update { it?.copy(carbsText = value) }
+    fun onEditorCaloriesChange(value: String) { invalidateEstimate(); _editor.update { it?.copy(caloriesText = value) } }
+    fun onEditorProteinChange(value: String) { invalidateEstimate(); _editor.update { it?.copy(proteinText = value) } }
+    fun onEditorFatChange(value: String) { invalidateEstimate(); _editor.update { it?.copy(fatText = value) } }
+    fun onEditorCarbsChange(value: String) { invalidateEstimate(); _editor.update { it?.copy(carbsText = value) } }
     fun onEditorEstimateLaterChange(value: Boolean) = _editor.update { it?.copy(estimateLater = value) }
 
     /**
@@ -212,7 +276,10 @@ class NutritionViewModel(
     }
 
     /** Чип «Недавнее»: заполняет форму значениями выбранного блюда (на 100 г, если так вводилось). */
-    fun applyRecent(meal: Meal) = _editor.update { it?.withValuesOf(meal)?.copy(estimateError = null, estimateNote = null) }
+    fun applyRecent(meal: Meal) {
+        invalidateEstimate()
+        _editor.update { it?.withValuesOf(meal)?.copy(estimateError = null, estimateNote = null) }
+    }
 
     private fun MealEditorState.withValuesOf(meal: Meal): MealEditorState {
         val serving = meal.servingG?.let(::numberText) ?: ""
@@ -245,6 +312,7 @@ class NutritionViewModel(
     /** Сохраняет форму: новый приём — вставка, существующий — обновление полей. */
     fun saveEditor() {
         val state = _editor.value ?: return
+        if (editorAthleteId != repo.currentAthleteId) { closeEditor(); return }
         if (!state.canSave) return
         val name = state.name.trim()
         val totals = state.totals ?: MacroTotals(0, 0.0, 0.0, 0.0)
@@ -254,6 +322,7 @@ class NutritionViewModel(
         val needsEstimate = state.estimateLater
         val existing = state.editing
         val day = _selectedDay.value
+        val athleteId = editorAthleteId
         _editor.value = null
         viewModelScope.launch {
             if (existing == null) {
@@ -269,6 +338,7 @@ class NutritionViewModel(
                     servingG = serving,
                     per100 = per100,
                     needsEstimate = needsEstimate,
+                    athleteId = athleteId,
                 )
             } else {
                 // День и время приёма при редактировании не меняем
@@ -286,20 +356,25 @@ class NutritionViewModel(
                         fatPer100 = per100?.fatG,
                         carbsPer100 = per100?.carbsG,
                         needsEstimate = needsEstimate,
-                    )
+                    ),
+                    athleteId = athleteId,
                 )
             }
         }
     }
 
     fun deleteMeal(meal: Meal) {
-        viewModelScope.launch { repo.deleteMeal(meal) }
+        val owner = repo.currentAthleteId
+        if (meal.athleteId != owner) return
+        viewModelScope.launch { repo.deleteMeal(meal, owner) }
     }
 
     /** Перетаскивание карточки в другую секцию. */
     fun moveMeal(meal: Meal, type: MealType) {
         if (meal.mealType == type) return
-        viewModelScope.launch { repo.moveMeal(meal.id, type) }
+        val owner = repo.currentAthleteId
+        if (meal.athleteId != owner) return
+        viewModelScope.launch { repo.moveMeal(meal.id, type, owner) }
     }
 
     // --- Расчёт через ИИ ---
@@ -311,9 +386,12 @@ class NutritionViewModel(
         _editor.update { it?.copy(estimating = true, estimateError = null, estimateNote = null) }
         val name = state.name.trim()
         val serving = state.servingG
-        viewModelScope.launch {
+        val generation = editorGeneration
+        val athleteId = editorAthleteId
+        estimateJob = viewModelScope.launch {
             try {
                 val result = est.estimate(name, serving)
+                if (generation != editorGeneration || athleteId != repo.currentAthleteId) return@launch
                 _editor.update { cur ->
                     cur ?: return@update null
                     val servingText = cur.servingText.ifBlank { result.servingG?.let(::numberText) ?: "" }
@@ -325,9 +403,13 @@ class NutritionViewModel(
                         estimateNote = result.note ?: "Оценка ИИ — при необходимости поправьте",
                     ).withPer100Text(result.per100)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: EstimateException) {
+                if (generation != editorGeneration) return@launch
                 _editor.update { it?.copy(estimating = false, estimateError = e.message) }
             } catch (e: Exception) {
+                if (generation != editorGeneration) return@launch
                 _editor.update { it?.copy(estimating = false, estimateError = "Не удалось рассчитать: ${e.message ?: e.javaClass.simpleName}") }
             }
         }
@@ -348,15 +430,18 @@ class NutritionViewModel(
     fun exportPendingEstimates() {
         val ex = exchange ?: return
         if (_busy.value) return
+        val owner = repo.currentAthleteId
+        _busy.value = true
         viewModelScope.launch {
-            _busy.value = true
             try {
-                val pending = repo.getPendingEstimatesOnce()
+                val pending = repo.getPendingEstimatesOnce(owner)
+                require(repo.currentAthleteId == owner) { "Профиль изменился. Повторите выгрузку." }
                 if (pending.isEmpty()) {
                     _events.send(NutritionEvent.Message("Нет приёмов, ожидающих расчёта"))
                 } else {
                     _events.send(NutritionEvent.Share(ex.shareRequest(pending)))
                 }
+            } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
                 _events.send(NutritionEvent.Message("Не удалось подготовить файл: ${e.message}"))
             } finally {
@@ -368,12 +453,15 @@ class NutritionViewModel(
     fun importEstimates(uri: Uri) {
         val ex = exchange ?: return
         if (_busy.value) return
+        val owner = repo.currentAthleteId
+        _busy.value = true
         viewModelScope.launch {
-            _busy.value = true
             try {
                 val text = ex.readText(uri)
+                require(repo.currentAthleteId == owner) { "Профиль изменился. Повторите загрузку." }
                 val message = applyEstimateText(text)
                 _events.send(NutritionEvent.Message(message))
+            } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
                 _events.send(NutritionEvent.Message("Не удалось загрузить файл: ${e.message}"))
             } finally {
@@ -384,18 +472,15 @@ class NutritionViewModel(
 
     /** Разбор и применение содержимого файла ответа; возвращает текст для пользователя. */
     suspend fun applyEstimateText(text: String): String {
-        val updates = try {
-            EstimateExchange.parseResponse(text)
-        } catch (e: IllegalArgumentException) {
+        val batch = try {
+            requireNotNull(exchange) { "Файл-обмен не настроен" }.readResponse(text)
+        } catch (e: Exception) {
             return "Файл не распознан: ${e.message}"
         }
-        if (updates.isEmpty()) return "В файле нет заполненных значений"
-        val applied = repo.applyEstimates(updates)
-        return when {
-            applied == 0 -> "Приёмы из файла не найдены в дневнике"
-            applied == updates.size -> "Рассчитано: $applied ${pluralMeals(applied)}"
-            else -> "Рассчитано: $applied из ${updates.size} — остальные не найдены"
-        }
+        if (batch.updates.isEmpty()) return "В файле нет заполненных значений"
+        val changes = repo.previewEstimates(batch.updates, batch.athleteId)
+        _importPreview.value = ImportPreview(batch, changes)
+        return "Проверьте расчёт перед применением"
     }
 
     // --- Цели КБЖУ ---

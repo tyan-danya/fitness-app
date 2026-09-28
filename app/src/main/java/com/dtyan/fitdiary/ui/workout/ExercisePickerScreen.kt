@@ -50,6 +50,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,7 +84,7 @@ fun ExercisePickerScreen(
 ) {
     val container = LocalContext.current.appContainer
     val vm: ExercisePickerViewModel = viewModel(key = "exercise_picker_$workoutId") {
-        ExercisePickerViewModel(container.exerciseRepository)
+        ExercisePickerViewModel(container.exerciseRepository, workoutId, container.workoutRepository)
     }
 
     val uiState by vm.uiState.collectAsStateWithLifecycle()
@@ -91,11 +92,27 @@ fun ExercisePickerScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var selectedEquipment by rememberSaveable { mutableStateOf(EQUIPMENT_ALL) }
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var choosing by remember { mutableStateOf(false) }
+    var chooseError by remember { mutableStateOf<String?>(null) }
+    fun choose(exerciseId: Long) {
+        if (choosing) return
+        choosing = true
+        chooseError = null
+        scope.launch {
+            try {
+                container.workoutRepository.planExercise(workoutId, exerciseId)
+                onExerciseChosen(exerciseId)
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (_: Exception) { chooseError = "Не удалось добавить упражнение. Попробуйте ещё раз." }
+            finally { choosing = false }
+        }
+    }
 
     // Прокидываем фильтр оборудования в VM (в т.ч. после восстановления state).
     LaunchedEffect(selectedEquipment) {
         vm.setEquipment(selectedEquipment.takeUnless { it == EQUIPMENT_ALL })
     }
+    LaunchedEffect(query) { vm.setQuery(query) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -123,6 +140,7 @@ fun ExercisePickerScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
+            chooseError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
             // Поиск-пилюля.
             OutlinedTextField(
                 value = query,
@@ -185,7 +203,7 @@ fun ExercisePickerScreen(
                         ExerciseRow(
                             exercise = exercise,
                             showGroup = true,
-                            onClick = { onExerciseChosen(exercise.id) },
+                            onClick = { choose(exercise.id) },
                         )
                     }
                 }
@@ -207,7 +225,7 @@ fun ExercisePickerScreen(
                         ExerciseRow(
                             exercise = exercise,
                             showGroup = false,
-                            onClick = { onExerciseChosen(exercise.id) },
+                            onClick = { choose(exercise.id) },
                         )
                     }
                 }
@@ -237,7 +255,7 @@ fun ExercisePickerScreen(
             },
             onCreate = { name, group, equipment, photoPath ->
                 showCreateDialog = false
-                vm.createExercise(name, group, equipment, photoPath, onExerciseChosen)
+                vm.createExercise(name, group, equipment, photoPath, ::choose)
             },
         )
     }

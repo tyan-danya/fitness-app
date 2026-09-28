@@ -77,6 +77,7 @@ class MeasurementsViewModel(
 
     private val _editor = MutableStateFlow<SessionEditorState?>(null)
     val editor: StateFlow<SessionEditorState?> = _editor.asStateFlow()
+    private var editorAthleteId = repo.currentAthleteId
 
     /** Зона, для которой открыта история (полный список замеров с удалением). */
     private val _historyType = MutableStateFlow<MeasurementType?>(null)
@@ -119,7 +120,8 @@ class MeasurementsViewModel(
     // --- Запись сессии замеров ---
 
     fun openEditor() {
-        val tracked = settings.value.trackedMeasurements
+        editorAthleteId = repo.currentAthleteId
+        val tracked = settingsStore.settingsFor(editorAthleteId).trackedMeasurements
         _editor.value = SessionEditorState(values = MeasurementType.entries.filter { it in tracked }.associateWith { "" })
     }
 
@@ -133,8 +135,11 @@ class MeasurementsViewModel(
     fun saveEditor() {
         val state = _editor.value ?: return
         if (!state.canSave) return
+        // The sheet may finish its hide animation after the global profile changed.
+        val owner = editorAthleteId
+        val timestamp = now()
         _editor.value = null
-        viewModelScope.launch { repo.addSession(state.parsed, now = now(), note = state.note) }
+        viewModelScope.launch { repo.addSession(state.parsed, now = timestamp, note = state.note, athleteId = owner) }
     }
 
     fun delete(item: BodyMeasurement) {

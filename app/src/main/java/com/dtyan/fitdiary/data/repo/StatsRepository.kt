@@ -7,31 +7,34 @@ import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.data.db.WorkoutDao
 import com.dtyan.fitdiary.data.db.WorkoutSetDao
 import com.dtyan.fitdiary.data.db.WorkoutVolumePoint
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class StatsRepository(
     private val workoutDao: WorkoutDao,
     private val setDao: WorkoutSetDao,
     private val weightDao: WeightDao,
+    private val activeAthleteId: StateFlow<Long> = MutableStateFlow(1L),
 ) {
-    /** Времена начала завершённых тренировок в интервале (для календаря/стрика). */
-    suspend fun workoutStartTimesBetween(fromMillis: Long, toMillis: Long): List<Long> =
-        workoutDao.startTimesBetween(fromMillis, toMillis)
-
-    fun observeWeightHistory(): Flow<List<WeightEntry>> = weightDao.observeAll()
-    fun observeLatestWeight(): Flow<WeightEntry?> = weightDao.observeLatest()
-
-    suspend fun addWeightEntry(weightKg: Double, now: Long = System.currentTimeMillis()): Long =
-        weightDao.insert(WeightEntry(timestamp = now, weightKg = weightKg, fromWorkout = false))
-
+    val currentAthleteId: Long get() = activeAthleteId.value
+    suspend fun workoutStartTimesBetween(fromMillis: Long, toMillis: Long, athleteId: Long = activeAthleteId.value): List<Long> =
+        workoutDao.startTimesBetween(fromMillis, toMillis, athleteId)
+    fun observeWeightHistory(): Flow<List<WeightEntry>> = activeAthleteId.flatMapLatest { weightDao.observeAll(it) }
+    fun observeLatestWeight(): Flow<WeightEntry?> = activeAthleteId.flatMapLatest { weightDao.observeLatest(it) }
+    fun observeLatestWeight(athleteId: Long): Flow<WeightEntry?> = weightDao.observeLatest(athleteId)
+    suspend fun addWeightEntry(weightKg: Double, now: Long = System.currentTimeMillis(), athleteId: Long = activeAthleteId.value): Long {
+        require(weightKg.isFinite() && weightKg > 0) { "Вес должен быть больше нуля" }
+        return weightDao.insert(WeightEntry(timestamp = now, weightKg = weightKg, athleteId = athleteId))
+    }
     suspend fun deleteWeightEntry(entry: WeightEntry) = weightDao.delete(entry)
-
-    /** История подходов упражнения по завершённым тренировкам (для графика прогресса). */
-    suspend fun exerciseHistory(exerciseId: Long): List<ExerciseSetPoint> =
-        setDao.historyForExercise(exerciseId)
-
-    /** Тоннаж каждой завершённой тренировки (для агрегации по неделям). */
-    suspend fun volumePoints(): List<WorkoutVolumePoint> = workoutDao.volumePoints()
-
-    suspend fun getAllFinishedWorkoutsOnce(): List<Workout> = workoutDao.getAllFinishedOnce()
+    suspend fun exerciseHistory(exerciseId: Long, athleteId: Long = activeAthleteId.value): List<ExerciseSetPoint> =
+        setDao.historyForExercise(exerciseId, athleteId)
+    suspend fun volumePoints(athleteId: Long = activeAthleteId.value): List<WorkoutVolumePoint> = workoutDao.volumePoints(athleteId)
+    suspend fun getAllFinishedWorkoutsOnce(athleteId: Long = activeAthleteId.value): List<Workout> =
+        workoutDao.getAllFinishedOnce(athleteId)
+    suspend fun getWeightHistoryOnce(athleteId: Long = activeAthleteId.value): List<WeightEntry> = weightDao.getAllOnce(athleteId)
 }

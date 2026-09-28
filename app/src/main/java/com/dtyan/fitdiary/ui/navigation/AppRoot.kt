@@ -17,7 +17,17 @@ import com.dtyan.fitdiary.ui.theme.fitAccents
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dtyan.fitdiary.appContainer
+import com.dtyan.fitdiary.ui.profile.ProfileToolbar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -69,13 +79,24 @@ private val TABS = listOf(
  * (например, тап по уведомлению о замерах); меняется — переходим на неё.
  */
 @Composable
-fun AppRoot(requestedTab: String? = null) {
+fun AppRoot(requestedTab: String? = null, requestNonce: Int = 0) {
+    val container = LocalContext.current.appContainer
+    val athleteId by container.profiles.activeId.collectAsStateWithLifecycle()
+    var dataRevision by remember { mutableIntStateOf(0) }
+    key(athleteId, dataRevision) {
+        ProfileNavigation(requestedTab, requestNonce, onDataRestored = { dataRevision++ })
+    }
+}
+
+@Composable
+private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRestored: () -> Unit) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in TABS.map { it.route }
+    val compactLabels = LocalConfiguration.current.screenWidthDp < 360 || LocalDensity.current.fontScale > 1.15f
 
-    LaunchedEffect(requestedTab) {
+    LaunchedEffect(requestedTab, requestNonce) {
         val route = requestedTab?.takeIf { r -> TABS.any { it.route == r } } ?: return@LaunchedEffect
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -85,6 +106,7 @@ fun AppRoot(requestedTab: String? = null) {
     }
 
     Scaffold(
+        topBar = { if (showBottomBar) ProfileToolbar(onDataRestored) },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -109,7 +131,11 @@ fun AppRoot(requestedTab: String? = null) {
                                 }
                             },
                             icon = { Icon(tab.icon, contentDescription = tab.title) },
-                            label = { Text(tab.title) },
+                            label = { Text(if (compactLabels) when (tab.route) {
+                                Routes.HOME -> "Зал"
+                                Routes.STATS -> "Итоги"
+                                else -> tab.title
+                            } else tab.title) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = accent,
                                 selectedTextColor = accent,
@@ -153,9 +179,9 @@ fun AppRoot(requestedTab: String? = null) {
                 val workoutId = entry.arguments?.getLong("workoutId") ?: return@composable
                 ActiveWorkoutScreen(
                     workoutId = workoutId,
-                    onAddExercise = { navController.navigate(Routes.exercisePicker(workoutId)) },
-                    onOpenExercise = { exerciseId ->
-                        navController.navigate(Routes.exerciseLog(workoutId, exerciseId))
+                    onAddExercise = { selectedWorkoutId -> navController.navigate(Routes.exercisePicker(selectedWorkoutId)) },
+                    onOpenExercise = { selectedWorkoutId, exerciseId ->
+                        navController.navigate(Routes.exerciseLog(selectedWorkoutId, exerciseId))
                     },
                     onWorkoutClosed = {
                         navController.popBackStack(Routes.HOME, inclusive = false)
@@ -212,6 +238,7 @@ fun AppRoot(requestedTab: String? = null) {
                 WorkoutDetailsScreen(
                     workoutId = workoutId,
                     onBack = { navController.popBackStack() },
+                    onRepeatWorkout = { id -> navController.navigate(Routes.activeWorkout(id)) },
                 )
             }
         }

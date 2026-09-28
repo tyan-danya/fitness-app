@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,6 +7,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
 }
+
+val releaseSecrets = Properties().apply {
+    val local = rootProject.file("signing.properties")
+    if (local.isFile) local.inputStream().use { load(it) }
+}
+fun releaseSecret(name: String, environment: String): String? =
+    System.getenv(environment)?.takeIf { it.isNotBlank() } ?: releaseSecrets.getProperty(name)
 
 android {
     namespace = "com.dtyan.fitdiary"
@@ -14,19 +23,22 @@ android {
         applicationId = "com.dtyan.fitdiary"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
     }
 
     signingConfigs {
-        create("localRelease") {
-            storeFile = file("../keystore/fitdiary.jks")
-            storePassword = "fitdiary"
-            keyAlias = "fitdiary"
-            keyPassword = "fitdiary"
+        val path = releaseSecret("storeFile", "FITDIARY_KEYSTORE")
+        if (!path.isNullOrBlank()) {
+            create("localRelease") {
+                storeFile = rootProject.file(path)
+                storePassword = releaseSecret("storePassword", "FITDIARY_STORE_PASSWORD")
+                keyAlias = releaseSecret("keyAlias", "FITDIARY_KEY_ALIAS")
+                keyPassword = releaseSecret("keyPassword", "FITDIARY_KEY_PASSWORD")
+            }
         }
     }
 
@@ -34,7 +46,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("localRelease")
+            signingConfig = signingConfigs.findByName("localRelease")
         }
         debug {
             applicationIdSuffix = ".debug"

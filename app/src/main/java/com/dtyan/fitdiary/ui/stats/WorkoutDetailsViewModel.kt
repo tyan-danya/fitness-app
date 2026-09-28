@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 /** Подходы одного упражнения внутри тренировки. */
 data class ExerciseGroup(
@@ -23,10 +24,12 @@ data class WorkoutDetailsUiState(
     val workout: Workout? = null,
     val totalVolumeKg: Double = 0.0,
     val groups: List<ExerciseGroup> = emptyList(),
+    val busy: Boolean = false,
+    val error: String? = null,
 )
 
 class WorkoutDetailsViewModel(
-    workoutId: Long,
+    private val workoutId: Long,
     private val workoutRepository: WorkoutRepository,
 ) : ViewModel() {
 
@@ -35,6 +38,7 @@ class WorkoutDetailsViewModel(
 
     init {
         viewModelScope.launch {
+            try {
             val workout = workoutRepository.getWorkoutOnce(workoutId)
             val sets = workoutRepository.getSetsForWorkoutOnce(workoutId)
             // groupBy сохраняет порядок первого появления упражнения в тренировке
@@ -52,6 +56,30 @@ class WorkoutDetailsViewModel(
                 totalVolumeKg = sets.sumOf { it.weightKg * it.reps },
                 groups = groups,
             )
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _state.value = WorkoutDetailsUiState(loading = false, error = "Не удалось загрузить тренировку") }
+        }
+    }
+
+    fun deleteWorkout(onDeleted: () -> Unit) = mutate {
+        workoutRepository.deleteWorkout(workoutId)
+        onDeleted()
+    }
+
+    fun repeatWorkout(onStarted: (Long) -> Unit) = mutate {
+        val owner = _state.value.workout?.athleteId ?: return@mutate
+        onStarted(workoutRepository.repeatWorkout(workoutId, listOf(owner)).first().id)
+    }
+
+    private fun mutate(action: suspend () -> Unit) {
+        if (_state.value.busy) return
+        _state.value = _state.value.copy(busy = true, error = null)
+        viewModelScope.launch {
+            try { action() }
+            catch (e: CancellationException) { throw e }
+            catch (e: IllegalArgumentException) { _state.value = _state.value.copy(error = e.message ?: "Не удалось сохранить изменение") }
+            catch (_: Exception) { _state.value = _state.value.copy(error = "Не удалось сохранить изменение. Попробуйте ещё раз.") }
+            finally { _state.value = _state.value.copy(busy = false) }
         }
     }
 }

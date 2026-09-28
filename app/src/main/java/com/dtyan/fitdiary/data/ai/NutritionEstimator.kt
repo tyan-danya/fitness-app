@@ -206,6 +206,11 @@ class NutritionEstimator(
                 carbsG = (num("carbs_per_100g", "carbsPer100") ?: 0.0).coerceAtLeast(0.0),
             )
             val serving = num("serving_g", "servingG")?.takeIf { it > 0 }
+            if (!per100.kcal.isFinite() || per100.kcal !in 0.0..1000.0 ||
+                listOf(per100.proteinG, per100.fatG, per100.carbsG).any { !it.isFinite() || it !in 0.0..100.0 } ||
+                (serving != null && (!serving.isFinite() || serving > 100_000.0))) {
+                throw EstimateException("ИИ вернул некорректные значения КБЖУ. Введите их вручную или повторите расчёт.")
+            }
             val note = (obj["note"] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
             return NutritionEstimate(per100, serving, note)
         }

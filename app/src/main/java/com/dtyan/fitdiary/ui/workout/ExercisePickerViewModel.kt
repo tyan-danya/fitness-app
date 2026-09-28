@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseSeed
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
+import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,8 @@ data class PickerUiState(
 
 class ExercisePickerViewModel(
     private val exerciseRepository: ExerciseRepository,
+    private val workoutId: Long? = null,
+    private val workoutRepository: WorkoutRepository? = null,
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
@@ -31,8 +34,10 @@ class ExercisePickerViewModel(
     private val usedIds = MutableStateFlow<List<Long>>(emptyList())
 
     init {
+        val fallbackOwner = exerciseRepository.currentAthleteId
         viewModelScope.launch {
-            usedIds.value = exerciseRepository.usedExerciseIds()
+            val owner = workoutId?.let { workoutRepository?.getWorkoutOnce(it)?.athleteId } ?: fallbackOwner
+            usedIds.value = exerciseRepository.usedExerciseIds(owner)
         }
     }
 

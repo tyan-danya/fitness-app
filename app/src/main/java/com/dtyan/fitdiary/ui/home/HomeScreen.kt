@@ -13,12 +13,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -32,10 +37,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +55,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -65,9 +77,10 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flowOf
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun HomeScreen(
     onOpenWorkout: (Long) -> Unit,
     onOpenWorkoutDetails: (Long) -> Unit,
@@ -81,6 +94,19 @@ fun HomeScreen(
     val summaries by vm.summaries.collectAsStateWithLifecycle()
     val stats by vm.stats.collectAsStateWithLifecycle()
     val latestWeight by vm.latestWeight.collectAsStateWithLifecycle()
+    val profiles by container.profiles.profiles.collectAsStateWithLifecycle(emptyList())
+    val activeId by container.profiles.activeId.collectAsStateWithLifecycle()
+    val starting by vm.starting.collectAsStateWithLifecycle()
+    val error by vm.error.collectAsStateWithLifecycle()
+    var choosingParticipants by rememberSaveable { mutableStateOf(false) }
+    var repeatSource by rememberSaveable { mutableStateOf<Long?>(null) }
+    var chosenIds by rememberSaveable { mutableStateOf<List<Long>>(emptyList()) }
+    var requiredIds by rememberSaveable { mutableStateOf<List<Long>>(emptyList()) }
+    val groupFlow = remember(activeWorkout?.id) {
+        activeWorkout?.id?.let { container.workoutRepository.observeGroupWorkouts(it) } ?: flowOf(emptyList())
+    }
+    val currentGroup by groupFlow.collectAsStateWithLifecycle(emptyList())
+    val compactStats = LocalDensity.current.fontScale > 1.2f || LocalConfiguration.current.screenWidthDp < 360
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -94,18 +120,48 @@ fun HomeScreen(
         item(key = "hero") {
             val current = activeWorkout
             if (current == null) {
-                StartWorkoutHeroCard(onStart = { vm.startWorkout(onOpenWorkout) })
+                StartWorkoutHeroCard(onStart = { if (!starting) vm.startWorkout(onOpenWorkout) })
             } else {
                 ActiveWorkoutHeroCard(workout = current, onContinue = { onOpenWorkout(current.id) })
             }
         }
 
+        item(key = "actions") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                        requiredIds = if (activeWorkout == null) emptyList() else
+                            listOf(activeId) + currentGroup.map { it.athleteId }.filter { it != activeId }
+                        chosenIds = if (requiredIds.isNotEmpty()) requiredIds.toList() else
+                            listOf(activeId) + profiles.map { it.id }.filter { it != activeId }
+                        repeatSource = null
+                        choosingParticipants = true
+                    }, enabled = !starting && profiles.size > 1, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text(if (activeWorkout == null) "Тренироваться вместе" else "Добавить участников")
+                    }
+                    if (profiles.size < 2) Text("Добавьте друзей через выбор профиля сверху.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (activeWorkout == null) {
+                    summaries.firstOrNull()?.let { last ->
+                        TextButton(onClick = {
+                            chosenIds = listOf(activeId)
+                            requiredIds = emptyList()
+                            repeatSource = last.id
+                            choosingParticipants = true
+                        }, enabled = !starting, modifier = Modifier.fillMaxWidth()) { Text("Повторить упражнения прошлой тренировки") }
+                    }
+                }
+                if (starting) Text("Готовим тренировку…")
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        }
+
         item(key = "stats") {
-            Row(
+            FlowRow(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = if (compactStats) 2 else 3,
             ) {
                 StatChip(
                     icon = Icons.Filled.LocalFireDepartment,
@@ -113,8 +169,7 @@ fun HomeScreen(
                     value = "${stats.weeklyStreak} нед",
                     label = "стрик",
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                        .weight(1f),
                 )
                 StatChip(
                     icon = Icons.Filled.FitnessCenter,
@@ -122,8 +177,7 @@ fun HomeScreen(
                     value = "${stats.workoutsLast7Days}",
                     label = "за 7 дней",
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                        .weight(1f),
                 )
                 StatChip(
                     icon = Icons.Filled.MonitorWeight,
@@ -131,8 +185,7 @@ fun HomeScreen(
                     value = latestWeight?.let { Format.weight(it.weightKg) } ?: "—",
                     label = "вес, кг",
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
+                        .weight(1f),
                 )
             }
         }
@@ -164,6 +217,41 @@ fun HomeScreen(
             }
         }
     }
+    if (choosingParticipants) AlertDialog(
+        onDismissRequest = { if (!starting) choosingParticipants = false },
+        title = { Text(if (repeatSource != null) "Повторить упражнения" else "Кто тренируется?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(when {
+                    repeatSource != null -> "Скопируется только список упражнений. Веса и подходы записываются заново."
+                    requiredIds.isNotEmpty() -> "Выберите, кто присоединится. Имеющиеся участники и подходы сохранятся."
+                    else -> "У каждого будут свои подходы, история и рекорды."
+                })
+                profiles.forEach { athlete ->
+                    val alreadyFinished = currentGroup.any { it.athleteId == athlete.id && it.endedAt != null }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = athlete.id in chosenIds, enabled = !starting && athlete.id !in requiredIds, onCheckedChange = { selected ->
+                            chosenIds = if (selected) (chosenIds + athlete.id).distinct() else chosenIds.filter { it != athlete.id }
+                        })
+                        Text(athlete.name + when {
+                            athlete.id !in requiredIds -> ""
+                            alreadyFinished -> " · завершил"
+                            else -> " · уже в тренировке"
+                        })
+                    }
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { Button(enabled = chosenIds.isNotEmpty() && !starting, onClick = {
+            val done: (Long) -> Unit = { choosingParticipants = false; onOpenWorkout(it) }
+            val source = repeatSource
+            val ids = chosenIds.sortedBy { if (it == activeId) 0 else 1 }
+            if (source == null) vm.startTogether(ids, done)
+            else vm.repeatWorkout(source, ids, done)
+        }) { Text(if (starting) "Готовим…" else "Начать") } },
+        dismissButton = { TextButton(enabled = !starting, onClick = { choosingParticipants = false }) { Text("Отмена") } },
+    )
 }
 
 /** Приветствие по времени суток + короткий призыв. */
@@ -224,18 +312,9 @@ private fun StartWorkoutHeroCard(onStart: () -> Unit) {
     }
 }
 
-/** Та же hero-карточка, когда тренировка уже идёт: пульс + живой таймер. */
+/** Продолжение тренировки без постоянно обновляющегося отсчёта. */
 @Composable
 private fun ActiveWorkoutHeroCard(workout: Workout, onContinue: () -> Unit) {
-    // Живой таймер: тикаем раз в секунду, пока карточка на экране.
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(workout.id) {
-        while (true) {
-            now = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-
     val haptics = LocalHapticFeedback.current
     val pulse by rememberInfiniteTransition(label = "livePulse").animateFloat(
         initialValue = 0.35f,
@@ -277,14 +356,14 @@ private fun ActiveWorkoutHeroCard(workout: Workout, onContinue: () -> Unit) {
                             .background(Color.White.copy(alpha = pulse)),
                     )
                     Text(
-                        text = "Тренировка идёт",
+                        text = "Продолжить тренировку",
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                     )
                 }
                 Text(
-                    text = Format.durationClock(now - workout.startedAt),
-                    style = MaterialTheme.typography.displaySmall.copy(fontFeatureSettings = "tnum"),
+                    text = "Начало: ${Format.dateShort(Format.local(workout.startedAt).toLocalDate())}, ${Format.time(workout.startedAt)}",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = Color.White,
                 )
             }

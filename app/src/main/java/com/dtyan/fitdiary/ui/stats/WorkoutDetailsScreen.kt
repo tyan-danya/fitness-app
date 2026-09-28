@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -26,8 +27,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -50,15 +57,18 @@ import java.time.ZoneId
 fun WorkoutDetailsScreen(
     workoutId: Long,
     onBack: () -> Unit,
+    onRepeatWorkout: ((Long) -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
-    val vm: WorkoutDetailsViewModel = viewModel {
+    val vm: WorkoutDetailsViewModel = viewModel(key = "workout_details_$workoutId") {
         WorkoutDetailsViewModel(
             workoutId = workoutId,
             workoutRepository = container.workoutRepository,
         )
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    var showDelete by rememberSaveable(workoutId) { mutableStateOf(false) }
+    val athletes by container.profiles.allProfiles.collectAsStateWithLifecycle(emptyList())
 
     val workout = state.workout
     val title = if (workout != null) {
@@ -81,6 +91,11 @@ fun WorkoutDetailsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
                     }
                 },
+                actions = {
+                    if (workout != null) IconButton(onClick = { showDelete = true }, enabled = !state.busy) {
+                        Icon(Icons.Filled.Delete, "Удалить тренировку")
+                    }
+                },
             )
         },
     ) { innerPadding ->
@@ -97,7 +112,7 @@ fun WorkoutDetailsScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     EmptyState(
-                        title = "Тренировка не найдена",
+                        title = state.error ?: "Тренировка не найдена",
                         subtitle = null,
                         illustration = { IllustrationSearch(size = 96.dp) },
                     )
@@ -109,6 +124,11 @@ fun WorkoutDetailsScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    item(key = "owner") {
+                        Text(athletes.firstOrNull { it.id == workout.athleteId }?.name ?: "Участник",
+                            style = MaterialTheme.typography.titleMedium)
+                        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
                     item(key = "summary") {
                         WorkoutHeaderCard(
                             startedAt = workout.startedAt,
@@ -121,10 +141,30 @@ fun WorkoutDetailsScreen(
                     items(state.groups, key = { it.exerciseId }) { group ->
                         ExerciseGroupCard(group)
                     }
+                    if (onRepeatWorkout != null && state.groups.isNotEmpty()) item(key = "repeat") {
+                        OutlinedButton(onClick = { vm.repeatWorkout(onRepeatWorkout) },
+                            enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (state.busy) "Готовим…" else "Повторить список упражнений")
+                        }
+                        Text("Новая тренировка с теми же упражнениями. Подходы и веса не копируются.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
     }
+    if (showDelete) AlertDialog(
+        onDismissRequest = { if (!state.busy) showDelete = false },
+        title = { Text("Удалить эту тренировку?") },
+        text = { Column {
+            Text("Тренировка, её подходы и связанное взвешивание будут удалены. Тренировки друзей сохранятся.")
+            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        } },
+        confirmButton = { TextButton(enabled = !state.busy, onClick = {
+            vm.deleteWorkout { showDelete = false; onBack() }
+        }) { Text(if (state.busy) "Удаляем…" else "Удалить", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(enabled = !state.busy, onClick = { showDelete = false }) { Text("Отмена") } },
+    )
 }
 
 /** Шапка-сводка на statsContainer: длительность, подходы, тоннаж и контрольный вес. */

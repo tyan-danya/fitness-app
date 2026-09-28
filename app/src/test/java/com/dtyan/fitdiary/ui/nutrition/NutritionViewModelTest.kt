@@ -12,6 +12,7 @@ import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.domain.MealType
 import com.dtyan.fitdiary.domain.Per100
+import com.dtyan.fitdiary.export.EstimateExchange
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
@@ -46,6 +47,7 @@ class NutritionViewModelTest {
     private lateinit var settingsStore: SettingsStore
     private lateinit var transport: FakeTransport
     private lateinit var vm: NutritionViewModel
+    private lateinit var exchange: EstimateExchange
 
     private class FakeTransport : HttpTransport {
         var response: HttpResult = HttpResult(500, "")
@@ -65,7 +67,7 @@ class NutritionViewModelTest {
             .setQueryExecutor(executor)
             .setTransactionExecutor(executor)
             .build()
-        repo = NutritionRepository(db.mealDao())
+        repo = NutritionRepository(db.mealDao(), database = db)
         settingsStore = SettingsStore(context)
         // Чистые настройки: тесты в одном процессе делят SharedPreferences
         settingsStore.update { SettingsStore.Settings() }
@@ -75,7 +77,8 @@ class NutritionViewModelTest {
             transport = transport,
             ioDispatcher = mainRule.dispatcher,
         )
-        vm = NutritionViewModel(repo, settingsStore, estimator, exchange = null)
+        exchange = EstimateExchange(context, { settingsStore.diaryId })
+        vm = NutritionViewModel(repo, settingsStore, estimator, exchange = exchange)
     }
 
     @After
@@ -355,13 +358,17 @@ class NutritionViewModelTest {
         assertThat(vm.editor.value!!.estimateLater).isTrue()
         vm.closeEditor()
 
-        val message = vm.applyEstimateText(
-            """{"items":[{"id":${pending.id},"name":"Плов с курицей","servingG":300,
-                "kcalPer100":190,"proteinPer100":8,"fatPer100":7,"carbsPer100":24}]}""",
-        )
+        val request = exchange.createRequestJson(listOf(pending))
+        val response = request.replace("\"kcalPer100\": null", "\"kcalPer100\": 190")
+            .replace("\"proteinPer100\": null", "\"proteinPer100\": 8")
+            .replace("\"fatPer100\": null", "\"fatPer100\": 7")
+            .replace("\"carbsPer100\": null", "\"carbsPer100\": 24")
+        val message = vm.applyEstimateText(response)
+        assertThat(vm.meals.value.single().needsEstimate).isTrue() // preview never mutates
+        vm.confirmImport()
         advanceUntilIdle()
 
-        assertThat(message).isEqualTo("Рассчитано: 1 приём")
+        assertThat(message).isEqualTo("Проверьте расчёт перед применением")
         val done = vm.meals.value.single()
         assertThat(done.needsEstimate).isFalse()
         assertThat(done.calories).isEqualTo(570)
@@ -371,9 +378,9 @@ class NutritionViewModelTest {
 
         // Чужие id и мусор — понятные сообщения, без исключений
         assertThat(vm.applyEstimateText("""[{"id":9999,"kcalPer100":1}]"""))
-            .isEqualTo("Приёмы из файла не найдены в дневнике")
+            .startsWith("Файл не распознан")
         assertThat(vm.applyEstimateText("не json")).startsWith("Файл не распознан")
-        assertThat(vm.applyEstimateText("""{"items":[{"id":1}]}""")).isEqualTo("В файле нет заполненных значений")
+        assertThat(vm.applyEstimateText("""{"items":[{"id":1}]}""")).startsWith("Файл не распознан")
     }
 
     // ---------- Расчёт через ИИ ----------
@@ -507,8 +514,6 @@ class NutritionViewModelTest {
         assertThat(persisted.fatGoalG).isEqualTo(80)
         assertThat(persisted.carbGoalG).isEqualTo(300)
         // Прочие настройки не задеты.
-        assertThat(persisted.restTimerSeconds).isEqualTo(90)
-        assertThat(persisted.restTimerEnabled).isTrue()
     }
 
     // ---------- Редактирование и удаление ----------

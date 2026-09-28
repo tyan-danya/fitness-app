@@ -12,7 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,8 +58,10 @@ fun ExercisePhotoThumb(
 ) {
     val context = LocalContext.current
     val targetPx = with(LocalDensity.current) { (size * 2).roundToPx() }
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = photoPath) {
-        value = photoPath?.let { loadBitmap(File(context.filesDir, it), targetPx) }
+    var bitmap by remember(photoPath, targetPx) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(photoPath, targetPx) {
+        // Changing the path/size cancels the old IO result before it can update this state.
+        bitmap = photoPath?.let { loadBitmap(File(context.filesDir, it), targetPx) }
     }
     Box(
         modifier = modifier
@@ -82,8 +87,9 @@ fun ExercisePhotoThumb(
 @Composable
 fun PhotoViewerDialog(photoPath: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = photoPath) {
-        value = loadBitmap(File(context.filesDir, photoPath), 0)
+    var bitmap by remember(photoPath) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(photoPath) {
+        bitmap = loadBitmap(File(context.filesDir, photoPath), 0)
     }
     Dialog(onDismissRequest = onDismiss) {
         Surface(
