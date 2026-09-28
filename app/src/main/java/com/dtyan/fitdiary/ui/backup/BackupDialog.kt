@@ -65,7 +65,7 @@ fun BackupDialog(onDismiss: () -> Unit, onRestored: () -> Unit) {
             title = { Text("Резервные копии") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Копия содержит все профили, тренировки, питание, замеры, каталог и фото. API-ключ и настройки подключения ИИ в неё не входят.")
+                    Text("Копия содержит все профили, тренировки, программы, питание, замеры, каталог и фото. API-ключ и настройки подключения ИИ в неё не входят.")
                     OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
                         scope.launch {
                             busy = true; error = null

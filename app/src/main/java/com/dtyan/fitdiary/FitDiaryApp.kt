@@ -16,6 +16,7 @@ class FitDiaryApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.updater.schedule()
         // Будильник напоминания о замерах переставляем при каждом старте процесса — дёшево и надёжно
         MeasurementReminder.ensureChannel(this)
         applicationScope.launch {

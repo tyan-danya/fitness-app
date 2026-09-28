@@ -1,6 +1,7 @@
 package com.dtyan.fitdiary.ui.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Insights
@@ -19,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -45,6 +47,9 @@ import com.dtyan.fitdiary.ui.stats.WorkoutDetailsScreen
 import com.dtyan.fitdiary.ui.workout.ActiveWorkoutScreen
 import com.dtyan.fitdiary.ui.workout.ExerciseLogScreen
 import com.dtyan.fitdiary.ui.workout.ExercisePickerScreen
+import com.dtyan.fitdiary.ui.templates.TemplatesScreen
+import com.dtyan.fitdiary.ui.update.UpdateBanner
+import com.dtyan.fitdiary.ui.update.UpdateDialog
 
 /** Маршруты приложения. */
 object Routes {
@@ -57,12 +62,14 @@ object Routes {
     const val EXERCISE_LOG = "workout/{workoutId}/exercise/{exerciseId}"
     const val DAY_DETAILS = "stats/day/{epochDay}"
     const val WORKOUT_DETAILS = "stats/workout/{workoutId}"
+    const val TEMPLATES = "templates?sourceWorkoutId={sourceWorkoutId}"
 
     fun activeWorkout(workoutId: Long) = "workout/$workoutId"
     fun exercisePicker(workoutId: Long) = "workout/$workoutId/pick"
     fun exerciseLog(workoutId: Long, exerciseId: Long) = "workout/$workoutId/exercise/$exerciseId"
     fun dayDetails(epochDay: Long) = "stats/day/$epochDay"
     fun workoutDetails(workoutId: Long) = "stats/workout/$workoutId"
+    fun templates(sourceWorkoutId: Long? = null) = "templates?sourceWorkoutId=${sourceWorkoutId ?: 0L}"
 }
 
 private data class TabItem(val route: String, val title: String, val icon: ImageVector)
@@ -79,17 +86,23 @@ private val TABS = listOf(
  * (например, тап по уведомлению о замерах); меняется — переходим на неё.
  */
 @Composable
-fun AppRoot(requestedTab: String? = null, requestNonce: Int = 0) {
+fun AppRoot(requestedTab: String? = null, requestNonce: Int = 0, updateRequestNonce: Int = 0) {
     val container = LocalContext.current.appContainer
     val athleteId by container.profiles.activeId.collectAsStateWithLifecycle()
     var dataRevision by remember { mutableIntStateOf(0) }
-    key(athleteId, dataRevision) {
-        ProfileNavigation(requestedTab, requestNonce, onDataRestored = { dataRevision++ })
+    var showUpdates by remember { mutableStateOf(false) }
+    LaunchedEffect(updateRequestNonce) {
+        if (updateRequestNonce > 0) showUpdates = true
     }
+    key(athleteId, dataRevision) {
+        ProfileNavigation(requestedTab, requestNonce, onUpdates = { showUpdates = true }, onDataRestored = { dataRevision++ })
+    }
+    if (showUpdates) UpdateDialog(container.updater, onDismiss = { showUpdates = false })
 }
 
 @Composable
-private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRestored: () -> Unit) {
+private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onUpdates: () -> Unit, onDataRestored: () -> Unit) {
+    val updater = LocalContext.current.appContainer.updater
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -106,7 +119,10 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRe
     }
 
     Scaffold(
-        topBar = { if (showBottomBar) ProfileToolbar(onDataRestored) },
+        topBar = { if (showBottomBar) Column {
+            ProfileToolbar(onDataRestored, onUpdates = onUpdates)
+            if (currentRoute == Routes.HOME) UpdateBanner(updater, onOpen = onUpdates)
+        } },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -158,6 +174,7 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRe
                 HomeScreen(
                     onOpenWorkout = { id -> navController.navigate(Routes.activeWorkout(id)) },
                     onOpenWorkoutDetails = { id -> navController.navigate(Routes.workoutDetails(id)) },
+                    onOpenTemplates = { navController.navigate(Routes.templates()) },
                 )
             }
             composable(Routes.NUTRITION) {
@@ -186,6 +203,7 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRe
                     onWorkoutClosed = {
                         navController.popBackStack(Routes.HOME, inclusive = false)
                     },
+                    onSaveTemplate = { id -> navController.navigate(Routes.templates(id)) },
                 )
             }
             composable(
@@ -217,6 +235,18 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRe
                     workoutId = workoutId,
                     exerciseId = exerciseId,
                     onBack = { navController.popBackStack() },
+                    onOpenExercise = { nextWorkoutId, nextExerciseId ->
+                        navController.navigate(Routes.exerciseLog(nextWorkoutId, nextExerciseId)) {
+                            popUpTo(Routes.EXERCISE_LOG) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onPlanComplete = { id ->
+                        navController.navigate(Routes.activeWorkout(id)) {
+                            popUpTo(Routes.ACTIVE_WORKOUT) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
                 )
             }
             composable(
@@ -239,6 +269,21 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onDataRe
                     workoutId = workoutId,
                     onBack = { navController.popBackStack() },
                     onRepeatWorkout = { id -> navController.navigate(Routes.activeWorkout(id)) },
+                    onSaveTemplate = { id -> navController.navigate(Routes.templates(id)) },
+                )
+            }
+            composable(Routes.TEMPLATES, arguments = listOf(navArgument("sourceWorkoutId") {
+                type = NavType.LongType; defaultValue = 0L
+            })) { entry ->
+                TemplatesScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenWorkout = { id ->
+                        navController.navigate(Routes.activeWorkout(id)) {
+                            popUpTo(Routes.HOME)
+                            launchSingleTop = true
+                        }
+                    },
+                    sourceWorkoutId = entry.arguments?.getLong("sourceWorkoutId")?.takeIf { it > 0L },
                 )
             }
         }

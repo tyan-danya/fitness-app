@@ -38,6 +38,8 @@ class ExerciseLogViewModel(
     val uiState: StateFlow<ExerciseLogUiState> = _uiState.asStateFlow()
     val todaySets = workoutRepository.observeSetsForExercise(workoutId, exerciseId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val plan = workoutRepository.observePlan(workoutId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val weightText = savedStateHandle.getStateFlow("weight", "")
     val repsText = savedStateHandle.getStateFlow("reps", "")
     private val _prEvents = Channel<Unit>(Channel.BUFFERED)
@@ -123,6 +125,18 @@ class ExerciseLogViewModel(
     fun setWeightStep(step: Double) = mutate {
         exerciseRepository.updateWeightStep(exerciseId, step)
         _uiState.update { it.copy(weightStepKg = step) }
+    }
+    fun completeExercise(onNext: (Long?) -> Unit) = mutate {
+        require(workoutRepository.observeSetsForExercise(workoutId, exerciseId).first().isNotEmpty()) {
+            "Сначала запишите хотя бы один подход"
+        }
+        workoutRepository.markExerciseComplete(workoutId, exerciseId, true)
+        val remaining = workoutRepository.observePlan(workoutId).first()
+            .firstOrNull { it.completedAt == null && it.exercise.id != exerciseId }
+        onNext(remaining?.exercise?.id)
+    }
+    fun reopenExercise() = mutate {
+        workoutRepository.markExerciseComplete(workoutId, exerciseId, false)
     }
     private fun mutate(action: suspend () -> Unit) {
         if (_uiState.value.saving) return

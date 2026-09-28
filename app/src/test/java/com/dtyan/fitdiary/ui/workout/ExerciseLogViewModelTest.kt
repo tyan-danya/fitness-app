@@ -14,6 +14,7 @@ import com.dtyan.fitdiary.ui.common.Format
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -84,6 +85,43 @@ class ExerciseLogViewModelTest {
     }
 
     // ---------- Префилл полей ввода ----------
+
+    @Test fun guidedCompletion_requiresRealSet_andIsReversibleForOnlyThisParticipant() = runTest {
+        db.athleteDao().insert(Athlete(id = 1, name = "Даня"))
+        val friendId = db.athleteDao().insert(Athlete(name = "Миша"))
+        val e1 = exercise("Жим")
+        val e2 = exercise("Тяга")
+        val members = workoutRepo.startGroupWorkout(listOf(1, friendId), now = t0)
+        val mine = members.first { it.athleteId == 1L }.id
+        val friend = members.first { it.athleteId == friendId }.id
+        members.forEach { workout -> workoutRepo.planExercise(workout.id, e1); workoutRepo.planExercise(workout.id, e2) }
+        val vm = createVm(mine, e1)
+        advanceUntilIdle()
+        var callbackCount = 0
+        var next: Long? = null
+        vm.completeExercise { callbackCount++; next = it }
+        advanceUntilIdle()
+        assertThat(callbackCount).isEqualTo(0)
+        assertThat(vm.uiState.value.error).isNotNull()
+        assertThat(workoutRepo.observePlan(mine).first().first().completedAt).isNull()
+
+        vm.addSet()
+        advanceUntilIdle()
+        vm.completeExercise { callbackCount++; next = it }
+        vm.completeExercise { callbackCount++ }
+        advanceUntilIdle()
+        assertThat(callbackCount).isEqualTo(1)
+        assertThat(next).isEqualTo(e2)
+        assertThat(workoutRepo.observePlan(mine).first().first().completedAt).isNotNull()
+        assertThat(workoutRepo.observePlan(friend).first().all { it.completedAt == null }).isTrue()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(mine)).hasSize(1)
+        assertThat(db.workoutSetDao().getForWorkoutOnce(friend)).isEmpty()
+
+        vm.reopenExercise()
+        advanceUntilIdle()
+        assertThat(workoutRepo.observePlan(mine).first().first().completedAt).isNull()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(mine)).hasSize(1)
+    }
 
     @Test
     fun prefill_noHistory_defaults20kgAnd10Reps() = runTest {

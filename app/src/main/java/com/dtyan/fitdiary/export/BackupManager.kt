@@ -39,6 +39,7 @@ class BackupManager(
         val meals: Int,
         val photos: Int,
         val measurements: Int,
+        val templates: Int = 0,
     )
 
     private val mutex = Mutex()
@@ -53,7 +54,8 @@ class BackupManager(
         private const val MAX_TOTAL = 256L * 1024 * 1024
         private const val MAX_ENTRIES = 2001
         private const val MAX_ROWS = 200_000
-        private val TABLES = listOf("athletes", "exercises", "workouts", "workout_sets", "workout_exercises", "meals", "weight_entries", "body_measurements")
+        private val TABLES = listOf("athletes", "exercises", "workout_templates", "template_exercises", "workouts", "workout_sets", "workout_exercises", "meals", "weight_entries", "body_measurements")
+        private val V5_TABLES = TABLES.filterNot { it in setOf("workout_templates", "template_exercises") }.toSet()
         private val PHOTO_PATH = Regex("exercise_photos/[A-Za-z0-9_-]+\\.jpg")
     }
 
@@ -114,7 +116,11 @@ class BackupManager(
         val tables = buildJsonObject {
             for (table in TABLES) {
                 put(table, buildJsonArray {
-                    val order = if (table == "workout_exercises") "workoutId, position" else "id"
+                    val order = when (table) {
+                        "workout_exercises" -> "workoutId, position"
+                        "template_exercises" -> "templateId, position"
+                        else -> "id"
+                    }
                     sql.query("SELECT * FROM `$table` ORDER BY $order").use { cursor ->
                         while (cursor.moveToNext()) {
                             require(++totalRows <= MAX_ROWS) { "Слишком много записей" }
@@ -162,7 +168,7 @@ class BackupManager(
                 }
             }
             require(MANIFEST in names) { "В архиве нет дневника" }
-            val document = json.parseToJsonElement(File(stage, MANIFEST).readText(Charsets.UTF_8)).jsonObject
+            val document = upgradeDocument(json.parseToJsonElement(File(stage, MANIFEST).readText(Charsets.UTF_8)).jsonObject)
             validate(document)
             val referenced = photoPaths(document)
             require(names == referenced + MANIFEST) { "Фотографии не соответствуют дневнику" }
@@ -170,7 +176,7 @@ class BackupManager(
             val tables = document["tables"]!!.jsonObject
             BackupPreview(stage, document, tables["athletes"]!!.jsonArray.size,
                 tables["workouts"]!!.jsonArray.size, tables["meals"]!!.jsonArray.size,
-                referenced.size, tables["body_measurements"]!!.jsonArray.size)
+                referenced.size, tables["body_measurements"]!!.jsonArray.size, tables["workout_templates"]!!.jsonArray.size)
         } catch (e: Throwable) {
             stage.deleteRecursively()
             throw e
@@ -242,6 +248,31 @@ class BackupManager(
 
     private data class Column(val name: String, val type: String, val required: Boolean)
 
+    /** Version 1.5 backups remain usable; new program/completion state did not exist in schema 5. */
+    private fun upgradeDocument(document: JsonObject): JsonObject {
+        if (document["schemaVersion"]?.jsonPrimitive?.intOrNull != 5 || database.openHelper.writableDatabase.version != 6) return document
+        require(document["format"]?.jsonPrimitive?.content == FORMAT) { "Неизвестный формат резервной копии" }
+        val tables = document["tables"] as? JsonObject ?: error("Отсутствует дневник")
+        require(tables.keys == V5_TABLES) { "Неполный набор таблиц старой копии" }
+        val oldPlan = tables["workout_exercises"] as? JsonArray ?: error("Отсутствует план тренировки")
+        val plan = oldPlan.map { element ->
+            val row = element as? JsonObject ?: error("Некорректная запись плана")
+            require(row.keys == setOf("workoutId", "exerciseId", "position")) { "Некорректная структура старого плана" }
+            JsonObject(row.toMutableMap().apply {
+                put("targetSets", JsonNull); put("targetReps", JsonNull)
+                put("note", JsonNull); put("completedAt", JsonNull)
+            })
+        }
+        return JsonObject(document.toMutableMap().apply {
+            put("schemaVersion", JsonPrimitive(6))
+            put("tables", JsonObject(tables.toMutableMap().apply {
+                put("workout_exercises", JsonArray(plan))
+                put("workout_templates", JsonArray(emptyList()))
+                put("template_exercises", JsonArray(emptyList()))
+            }))
+        })
+    }
+
     private fun validate(document: JsonObject) {
         require(document["format"]?.jsonPrimitive?.content == FORMAT) { "Неизвестный формат резервной копии" }
         val sql = database.openHelper.writableDatabase
@@ -279,9 +310,13 @@ class BackupManager(
                         }
                     }
                 }
-                if (table == "workout_exercises") {
-                    require(compositeIds.add(row["workoutId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long)) { "Повторяющиеся упражнения плана" }
+                if (table in setOf("workout_exercises", "template_exercises")) {
+                    val parentKey = if (table == "workout_exercises") "workoutId" else "templateId"
+                    require(compositeIds.add(row[parentKey]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long)) { "Повторяющиеся упражнения плана" }
                     require(row["position"]!!.jsonPrimitive.int >= 0) { "Некорректный порядок упражнений" }
+                    row["targetSets"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..100) { "Некорректная цель подходов" } }
+                    row["targetReps"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..999) { "Некорректная цель повторов" } }
+                    row["note"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.content.length <= 500) { "Слишком длинное примечание" } }
                 } else {
                     val id = row.getValue("id").jsonPrimitive.long
                     require(id > 0 && rowIds.add(id)) { "Повторяющиеся идентификаторы" }
@@ -296,6 +331,7 @@ class BackupManager(
                 if (table == "meals") require(row["mealType"]!!.jsonPrimitive.content in setOf("BREAKFAST", "LUNCH", "DINNER", "SNACK")) { "Неизвестный тип приёма" }
                 row["epochDay"]?.let { require(runCatching { java.time.LocalDate.ofEpochDay(it.jsonPrimitive.long) }.isSuccess) { "Некорректная дата" } }
                 if (table == "athletes") require(row["name"]!!.jsonPrimitive.content.trim().length in 1..40) { "Некорректное имя профиля" }
+                if (table == "workout_templates") require(row["name"]!!.jsonPrimitive.content.trim().length in 1..80) { "Некорректное название программы" }
                 if (table == "exercises") require(row["weightStepKg"]!!.jsonPrimitive.double > 0) { "Некорректный шаг веса" }
                 if (table == "body_measurements") require(runCatching {
                     com.dtyan.fitdiary.domain.MeasurementType.valueOf(row["type"]!!.jsonPrimitive.content)
@@ -309,7 +345,7 @@ class BackupManager(
             it.jsonObject["id"]!!.jsonPrimitive.long == 1L && it.jsonObject["isArchived"]!!.jsonPrimitive.int == 0
         }) { "Основной профиль отсутствует или скрыт" }
         val profiles = ids.getValue("athletes")
-        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements")) {
+        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates")) {
             tables[table]!!.jsonArray.forEach { require(it.jsonObject["athleteId"]!!.jsonPrimitive.long in profiles) { "Запись без профиля" } }
         }
         val workouts = tables["workouts"]!!.jsonArray.map { it.jsonObject }
@@ -326,6 +362,21 @@ class BackupManager(
             val row = element.jsonObject
             require(row["workoutId"]!!.jsonPrimitive.long in ids.getValue("workouts") && row["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Подход без тренировки или упражнения" }
         }
+        val recordedExercises = setKeys.map { it.first to it.second }.toSet()
+        tables["workout_exercises"]!!.jsonArray.forEach { element ->
+            val row = element.jsonObject
+            if (row["completedAt"] != JsonNull) {
+                require((row["workoutId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long) in recordedExercises) {
+                    "Выполненное упражнение без записанных подходов"
+                }
+            }
+        }
+        tables["template_exercises"]!!.jsonArray.forEach { element ->
+            val row = element.jsonObject
+            require(row["templateId"]!!.jsonPrimitive.long in ids.getValue("workout_templates") && row["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Программа ссылается на отсутствующее упражнение" }
+        }
+        val templateItems = tables["template_exercises"]!!.jsonArray.groupBy { it.jsonObject["templateId"]!!.jsonPrimitive.long }
+        ids.getValue("workout_templates").forEach { require((templateItems[it]?.size ?: 0) in 1..100) { "В программе должно быть от 1 до 100 упражнений" } }
         tables["weight_entries"]!!.jsonArray.forEach { element ->
             val row = element.jsonObject
             row["sourceWorkoutId"]?.takeUnless { it == JsonNull }?.let { source ->

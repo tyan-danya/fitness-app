@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -25,7 +26,7 @@ import com.dtyan.fitdiary.ui.backup.BackupDialog
 import kotlinx.coroutines.launch
 
 @Composable
-fun ProfileToolbar(onDataRestored: () -> Unit) {
+fun ProfileToolbar(onDataRestored: () -> Unit, onUpdates: () -> Unit = {}) {
     val container = LocalContext.current.appContainer
     val people by container.profiles.profiles.collectAsStateWithLifecycle(emptyList())
     val active by container.profiles.activeId.collectAsStateWithLifecycle()
@@ -42,6 +43,9 @@ fun ProfileToolbar(onDataRestored: () -> Unit) {
             }
             IconButton(onClick = { backup = true }) {
                 Icon(Icons.Default.Backup, contentDescription = "Резервная копия и восстановление")
+            }
+            IconButton(onClick = onUpdates) {
+                Icon(Icons.Default.SystemUpdate, contentDescription = "Обновления приложения")
             }
         }
     }

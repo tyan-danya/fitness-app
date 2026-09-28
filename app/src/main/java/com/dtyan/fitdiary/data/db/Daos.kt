@@ -47,6 +47,8 @@ interface ExerciseDao {
     suspend fun getById(id: Long): Exercise?
     @Query("SELECT * FROM exercises WHERE isArchived = 0 ORDER BY muscleGroup, name")
     suspend fun getActiveOnce(): List<Exercise>
+    @Query("SELECT * FROM exercises ORDER BY isArchived, id")
+    suspend fun getAllOnce(): List<Exercise>
     @Insert
     suspend fun insert(exercise: Exercise): Long
     @Update
@@ -137,7 +139,13 @@ interface WorkoutDao {
         require(existingMembers[athleteIds.first()]?.endedAt == null) {
             "Вы уже завершили эту совместную тренировку. Начните отдельную тренировку или дождитесь остальных участников."
         }
-        return athleteIds.map { existingMembers[it] ?: startForAthlete(it, now, groupId) }
+        val existingActiveIds = athleteIds.mapNotNull { getActiveOnce(it)?.id }.toSet()
+        val workouts = athleteIds.map { existingMembers[it] ?: startForAthlete(it, now, groupId) }
+        val sourcePlan = getPlanOnce(workouts.first().id)
+        workouts.drop(1).filter { it.id !in existingActiveIds && it.athleteId !in existingMembers }.forEach { newcomer ->
+            sourcePlan.forEach { insertPlan(it.copy(workoutId = newcomer.id, completedAt = null)) }
+        }
+        return workouts
     }
 
     @Transaction
@@ -163,12 +171,32 @@ interface WorkoutDao {
     fun observePlannedExercises(workoutId: Long): Flow<List<Exercise>>
     @Query("SELECT exerciseId FROM workout_exercises WHERE workoutId = :workoutId ORDER BY position, exerciseId")
     suspend fun plannedExerciseIds(workoutId: Long): List<Long>
+    @Query("SELECT * FROM workout_exercises WHERE workoutId = :workoutId ORDER BY position, exerciseId")
+    suspend fun getPlanOnce(workoutId: Long): List<WorkoutExercise>
+    @Query("""SELECT e.*, p.workoutId, p.position, p.targetSets, p.targetReps, p.note, p.completedAt,
+        (SELECT COUNT(*) FROM workout_sets s WHERE s.workoutId = p.workoutId AND s.exerciseId = p.exerciseId) AS setCount
+        FROM workout_exercises p JOIN exercises e ON e.id = p.exerciseId
+        WHERE p.workoutId = :workoutId ORDER BY p.position, p.exerciseId""")
+    fun observePlan(workoutId: Long): Flow<List<WorkoutPlanEntry>>
     @Query("SELECT DISTINCT exerciseId FROM workout_sets WHERE workoutId = :workoutId ORDER BY completedAt, id")
     suspend fun performedExerciseIds(workoutId: Long): List<Long>
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlan(plan: WorkoutExercise)
     @Query("SELECT IFNULL(MAX(position), 0) + 1 FROM workout_exercises WHERE workoutId = :workoutId")
     suspend fun nextPlanPosition(workoutId: Long): Int
+    @Query("UPDATE workout_exercises SET completedAt = :completedAt WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
+    suspend fun setPlanCompletion(workoutId: Long, exerciseId: Long, completedAt: Long?)
+    @Query("SELECT COUNT(*) FROM workout_sets WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
+    suspend fun countPlanSets(workoutId: Long, exerciseId: Long): Int
+
+    @Transaction
+    suspend fun markExerciseComplete(workoutId: Long, exerciseId: Long, done: Boolean, now: Long) {
+        val workout = requireNotNull(getById(workoutId)) { "Тренировка не найдена" }
+        require(workout.endedAt == null) { "Тренировка уже завершена" }
+        val plan = requireNotNull(getPlanOnce(workoutId).find { it.exerciseId == exerciseId }) { "Упражнение не найдено в плане" }
+        require(!done || countPlanSets(workoutId, exerciseId) > 0) { "Сначала запишите хотя бы один подход" }
+        setPlanCompletion(workoutId, exerciseId, if (done) plan.completedAt ?: now else null)
+    }
 
     @Transaction
     suspend fun planExercise(workoutId: Long, exerciseId: Long) {
@@ -181,12 +209,47 @@ interface WorkoutDao {
     suspend fun repeatPlan(sourceWorkoutId: Long, athleteIds: List<Long>, now: Long, groupId: String): List<Workout> {
         requireNotNull(getById(sourceWorkoutId)) { "Тренировка не найдена" }
         require(athleteIds.none { getActiveOnce(it) != null }) { "Сначала завершите текущую тренировку" }
-        val exerciseIds = (plannedExerciseIds(sourceWorkoutId) + performedExerciseIds(sourceWorkoutId)).distinct()
+        val sourcePlan = getPlanOnce(sourceWorkoutId).associateBy { it.exerciseId }
+        val exerciseIds = (sourcePlan.keys + performedExerciseIds(sourceWorkoutId)).distinct()
         val workouts = if (athleteIds.size == 1) listOf(startForAthlete(athleteIds.single(), now))
             else startGroup(athleteIds, now, groupId)
-        workouts.forEach { workout -> exerciseIds.forEach { planExercise(workout.id, it) } }
+        workouts.forEach { workout ->
+            exerciseIds.forEachIndexed { index, exerciseId ->
+                val source = sourcePlan[exerciseId]
+                insertPlan(WorkoutExercise(workout.id, exerciseId, index + 1,
+                    source?.targetSets, source?.targetReps, source?.note))
+            }
+        }
         return workouts
     }
+}
+
+@Dao
+interface TemplateDao {
+    @Query("SELECT * FROM workout_templates WHERE athleteId = :athleteId ORDER BY id DESC")
+    fun observeTemplates(athleteId: Long): Flow<List<WorkoutTemplate>>
+    @Query("SELECT * FROM workout_templates WHERE id = :id AND athleteId = :athleteId")
+    fun observeById(id: Long, athleteId: Long): Flow<WorkoutTemplate?>
+    @Query("SELECT * FROM workout_templates WHERE id = :id AND athleteId = :athleteId")
+    suspend fun getById(id: Long, athleteId: Long): WorkoutTemplate?
+    @Query("""SELECT e.*, p.position, p.targetSets, p.targetReps, p.note
+        FROM template_exercises p JOIN exercises e ON e.id = p.exerciseId
+        WHERE p.templateId = :templateId ORDER BY p.position, p.exerciseId""")
+    fun observeItems(templateId: Long): Flow<List<TemplateExerciseInfo>>
+    @Query("""SELECT e.*, p.position, p.targetSets, p.targetReps, p.note
+        FROM template_exercises p JOIN exercises e ON e.id = p.exerciseId
+        WHERE p.templateId = :templateId ORDER BY p.position, p.exerciseId""")
+    suspend fun getItems(templateId: Long): List<TemplateExerciseInfo>
+    @Insert
+    suspend fun insert(template: WorkoutTemplate): Long
+    @Insert
+    suspend fun insertItems(items: List<TemplateExercise>)
+    @Update
+    suspend fun update(template: WorkoutTemplate)
+    @Query("DELETE FROM workout_templates WHERE id = :id AND athleteId = :athleteId")
+    suspend fun delete(id: Long, athleteId: Long)
+    @Query("DELETE FROM template_exercises WHERE templateId = :templateId")
+    suspend fun deleteItems(templateId: Long)
 }
 
 @Dao
@@ -235,6 +298,17 @@ interface WorkoutSetDao {
     suspend fun update(set: WorkoutSet)
     @Delete
     suspend fun delete(set: WorkoutSet)
+
+    @Query("""UPDATE workout_exercises SET completedAt = NULL
+        WHERE workoutId = :workoutId AND exerciseId = :exerciseId
+        AND NOT EXISTS (SELECT 1 FROM workout_sets WHERE workoutId = :workoutId AND exerciseId = :exerciseId)""")
+    suspend fun clearEmptyPlanCompletion(workoutId: Long, exerciseId: Long)
+
+    @Transaction
+    suspend fun deleteAndRefreshCompletion(set: WorkoutSet) {
+        delete(set)
+        clearEmptyPlanCompletion(set.workoutId, set.exerciseId)
+    }
 
     @Transaction
     suspend fun insertWithNextIndex(set: WorkoutSet): WorkoutSet {

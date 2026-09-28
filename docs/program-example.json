@@ -1,0 +1,28 @@
+{
+  "format": "fitdiary-template/1",
+  "name": "Пример программы",
+  "exercises": [
+    {
+      "name": "Жим штанги лёжа",
+      "muscleGroup": "Грудь",
+      "equipment": "Штанга",
+      "targetSets": 3,
+      "targetReps": 8,
+      "note": "Настройте план под свою тренировку"
+    },
+    {
+      "name": "Тяга верхнего блока",
+      "muscleGroup": "Спина",
+      "equipment": "Блок",
+      "targetSets": 3,
+      "targetReps": 10
+    },
+    {
+      "name": "Жим ногами",
+      "muscleGroup": "Ноги",
+      "equipment": "Тренажёр",
+      "targetSets": 3,
+      "targetReps": 10
+    }
+  ]
+}

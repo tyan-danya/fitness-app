@@ -8,6 +8,7 @@ import com.dtyan.fitdiary.data.db.WorkoutDao
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.db.WorkoutSetDao
 import com.dtyan.fitdiary.data.db.WorkoutSummary
+import com.dtyan.fitdiary.data.db.WorkoutPlanEntry
 import com.dtyan.fitdiary.domain.Calculations
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ class WorkoutRepository(
         activeAthleteId.flatMapLatest { workoutDao.observeFinishedSummaries(it) }
     fun observeGroupWorkouts(workoutId: Long): Flow<List<Workout>> = workoutDao.observeGroup(workoutId)
     fun observePlannedExercises(workoutId: Long): Flow<List<Exercise>> = workoutDao.observePlannedExercises(workoutId)
+    fun observePlan(workoutId: Long): Flow<List<WorkoutPlanEntry>> = workoutDao.observePlan(workoutId)
 
     suspend fun getWorkoutOnce(id: Long): Workout? = workoutDao.getById(id)
     suspend fun getSetsForWorkoutOnce(workoutId: Long): List<SetWithExercise> = setDao.getForWorkoutOnce(workoutId)
@@ -50,6 +52,9 @@ class WorkoutRepository(
     }
 
     suspend fun planExercise(workoutId: Long, exerciseId: Long) = workoutDao.planExercise(workoutId, exerciseId)
+
+    suspend fun markExerciseComplete(workoutId: Long, exerciseId: Long, done: Boolean, now: Long = System.currentTimeMillis()) =
+        workoutDao.markExerciseComplete(workoutId, exerciseId, done, now)
 
     suspend fun repeatWorkout(
         sourceWorkoutId: Long,
@@ -101,7 +106,7 @@ class WorkoutRepository(
         require(set.weightKg.isFinite() && set.weightKg >= 0 && set.reps > 0) { "Проверьте вес и повторы" }
         setDao.update(set)
     }
-    suspend fun deleteSet(set: WorkoutSet) = setDao.delete(set)
+    suspend fun deleteSet(set: WorkoutSet) = setDao.deleteAndRefreshCompletion(set)
 
     suspend fun previousWorkoutSets(exerciseId: Long, excludeWorkoutId: Long): List<WorkoutSet> =
         setDao.previousWorkoutSets(exerciseId, excludeWorkoutId, ownerOf(excludeWorkoutId))

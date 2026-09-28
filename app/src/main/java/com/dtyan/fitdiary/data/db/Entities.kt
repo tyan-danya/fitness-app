@@ -150,4 +150,42 @@ data class BodyMeasurement(
     ],
     indices = [Index("exerciseId")],
 )
-data class WorkoutExercise(val workoutId: Long, val exerciseId: Long, val position: Int)
+data class WorkoutExercise(
+    val workoutId: Long,
+    val exerciseId: Long,
+    val position: Int,
+    val targetSets: Int? = null,
+    val targetReps: Int? = null,
+    val note: String? = null,
+    val completedAt: Long? = null,
+)
+
+/** Личный сохранённый план. Начатые тренировки хранят независимую копию. */
+@Entity(
+    tableName = "workout_templates",
+    foreignKeys = [ForeignKey(entity = Athlete::class, parentColumns = ["id"], childColumns = ["athleteId"])],
+    indices = [Index("athleteId")],
+)
+data class WorkoutTemplate(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(defaultValue = "1") val athleteId: Long = 1L,
+    val name: String,
+)
+
+@Entity(
+    tableName = "template_exercises",
+    primaryKeys = ["templateId", "exerciseId"],
+    foreignKeys = [
+        ForeignKey(entity = WorkoutTemplate::class, parentColumns = ["id"], childColumns = ["templateId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Exercise::class, parentColumns = ["id"], childColumns = ["exerciseId"]),
+    ],
+    indices = [Index("exerciseId")],
+)
+data class TemplateExercise(
+    val templateId: Long,
+    val exerciseId: Long,
+    val position: Int,
+    @ColumnInfo(defaultValue = "3") val targetSets: Int = 3,
+    val targetReps: Int? = null,
+    val note: String? = null,
+)

@@ -2,8 +2,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="fitdiary_settings.xml" />
+        <exclude domain="sharedpref" path="fitdiary_updates.xml" />
+        <exclude domain="file" path="app_updates/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="fitdiary_settings.xml" />
+        <exclude domain="sharedpref" path="fitdiary_updates.xml" />
+        <exclude domain="file" path="app_updates/" />
     </device-transfer>
 </data-extraction-rules>

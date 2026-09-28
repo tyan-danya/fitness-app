@@ -15,6 +15,11 @@ data class ExerciseGroupUi(
     val muscleGroup: String,
     val sets: List<SetWithExercise>,
     val photoPath: String? = null,
+    val planned: Boolean = false,
+    val targetSets: Int? = null,
+    val targetReps: Int? = null,
+    val note: String? = null,
+    val completed: Boolean = false,
 )
 
 class ActiveWorkoutViewModel(
@@ -27,12 +32,15 @@ class ActiveWorkoutViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val participants = workoutRepository.observeGroupWorkouts(workoutId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val exerciseGroups = combine(sets, workoutRepository.observePlannedExercises(workoutId)) { list, plan ->
+    val exerciseGroups = combine(sets, workoutRepository.observePlan(workoutId)) { list, plan ->
         val byExercise = list.groupBy { it.exerciseId }
-        val planned = plan.map { exercise -> ExerciseGroupUi(
-            exercise.id, exercise.name, exercise.muscleGroup, byExercise[exercise.id].orEmpty(), exercise.photoPath,
+        val planned = plan.map { entry -> ExerciseGroupUi(
+            entry.exercise.id, entry.exercise.name, entry.exercise.muscleGroup,
+            byExercise[entry.exercise.id].orEmpty(), entry.exercise.photoPath,
+            planned = true, targetSets = entry.targetSets, targetReps = entry.targetReps,
+            note = entry.note, completed = entry.completedAt != null,
         ) }
-        planned + byExercise.filterKeys { id -> plan.none { it.id == id } }.map { (id, rows) ->
+        planned + byExercise.filterKeys { id -> plan.none { it.exercise.id == id } }.map { (id, rows) ->
             ExerciseGroupUi(id, rows.first().exerciseName, rows.first().muscleGroup, rows, rows.first().photoPath)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -40,6 +48,18 @@ class ActiveWorkoutViewModel(
     val busy = _busy.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
+
+    fun markComplete(exerciseId: Long, done: Boolean) {
+        if (_busy.value) return
+        _busy.value = true
+        _error.value = null
+        viewModelScope.launch {
+            try { workoutRepository.markExerciseComplete(workoutId, exerciseId, done) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _error.value = "Не удалось изменить отметку. Попробуйте ещё раз." }
+            finally { _busy.value = false }
+        }
+    }
 
     fun cancelWorkout(onClosed: () -> Unit) = close(onClosed) { workoutRepository.deleteWorkout(workoutId) }
     fun finishWorkout(bodyWeightKg: Double?, onClosed: () -> Unit) {

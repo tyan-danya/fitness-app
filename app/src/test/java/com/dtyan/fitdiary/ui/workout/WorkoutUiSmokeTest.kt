@@ -15,12 +15,15 @@ import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.AppContainer
 import com.dtyan.fitdiary.FitDiaryApp
 import com.dtyan.fitdiary.data.db.Exercise
+import com.dtyan.fitdiary.data.repo.TemplatePlanItem
 import com.dtyan.fitdiary.ui.navigation.AppRoot
+import com.dtyan.fitdiary.ui.templates.TemplatesScreen
 import com.dtyan.fitdiary.ui.theme.FitDiaryTheme
 import com.google.common.truth.Truth.assertThat
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -99,6 +102,138 @@ class WorkoutUiSmokeTest {
             assertThat(container.database.workoutDao().getActiveOnce(otherId)).isNotNull()
         }
         capture("group-workout-320dp-font130")
+    }
+
+    @Test fun updateNotificationOpensDialog_onceAcrossGlobalProfileChange() {
+        render { AppRoot(updateRequestNonce = 1) }
+        waitForText("Обновления ФитДневника")
+        compose.onNodeWithText("Обновления ФитДневника").assertIsDisplayed()
+        capture("update-dialog-320dp-font130")
+        compose.onNodeWithText("Закрыть", substring = false).performClick()
+        compose.onNodeWithText("Обновления ФитДневника").assertDoesNotExist()
+        runBlocking(Dispatchers.IO) { container.profiles.select(friendId) }
+        waitForText("Миша")
+        compose.waitForIdle()
+        compose.onNodeWithText("Обновления ФитДневника").assertDoesNotExist()
+        compose.onNodeWithText("Мои программы").assertExists()
+    }
+
+    @Test fun templates_editorAddsCatalogExercise_andSavesAtNarrowWidth() {
+        render { AppRoot() }
+        waitForText("Мои программы")
+        compose.onNodeWithText("Мои программы").performScrollTo().performClick()
+        waitForText("Создать программу")
+        compose.onNodeWithText("Создать программу").performClick()
+        waitForText("Название программы")
+        compose.onNode(hasSetTextAction() and hasText("Название программы")).performTextReplacement("Моя первая программа")
+        compose.onNodeWithText("Добавить из каталога").performScrollTo().performClick()
+        waitForText("Жим лёжа")
+        compose.onNodeWithText("Добавить", substring = false).performClick()
+        compose.onNodeWithText("Готово · выбрано: 1").performClick()
+        waitForText("1. Жим лёжа")
+        compose.onNode(hasSetTextAction() and hasText("Повторы · необязательно")).performScrollTo().performTextReplacement("8")
+        capture("template-editor-320dp-font130")
+        compose.onNodeWithText("Сохранить программу").performClick()
+        waitForText("Программа сохранена")
+        compose.onNodeWithText("Моя первая программа").assertExists()
+        runBlocking(Dispatchers.IO) {
+            val template = container.templateRepository.observeTemplates(1).first().single()
+            val row = container.templateRepository.getTemplate(template.id)!!.items.single()
+            assertThat(row.exercise.id).isEqualTo(exerciseId)
+            assertThat(row.targetSets).isEqualTo(3)
+            assertThat(row.targetReps).isEqualTo(8)
+            assertThat(container.database.workoutDao().getActiveOnce(1)).isNull()
+        }
+    }
+
+    @Test fun guidedProgram_recordsActualResult_andAdvancesOnlyCurrentParticipant() {
+        val secondId = runBlocking(Dispatchers.IO) {
+            val second = container.database.exerciseDao().insert(Exercise(name = "Тяга блока", muscleGroup = "Спина"))
+            container.templateRepository.create("День А", listOf(
+                TemplatePlanItem(exerciseId, 3, 8, "Контролируйте движение"),
+                TemplatePlanItem(second, 2, 10),
+            ), athleteId = 1)
+            second
+        }
+        render { AppRoot() }
+        waitForText("Мои программы")
+        compose.onNodeWithText("Мои программы").performScrollTo().performClick()
+        waitForText("День А")
+        compose.onNodeWithText("Начать по программе").performScrollTo().performClick()
+        waitForText("Кто тренируется?")
+        compose.onNodeWithText("Миша").performClick()
+        compose.onAllNodesWithText("Начать по программе").onLast().performClick()
+        waitForText("Открыть следующее: Жим лёжа")
+        compose.onNodeWithText("План: 0 из 2 упражнений выполнено").assertExists()
+        capture("guided-workout-320dp-font130")
+        compose.onNodeWithText("Открыть следующее: Жим лёжа").performScrollTo().performClick()
+        waitForText("Подход для: Даня")
+        compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено → следующее"))
+        compose.onNodeWithText("Упражнение выполнено → следующее").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction() and hasText("Вес, кг")).performScrollTo().performTextReplacement("41")
+        compose.onNode(hasSetTextAction() and hasText("Повторы")).performTextReplacement("6")
+        compose.onNodeWithText("Записать · Даня").performScrollTo().assertIsEnabled().assertIsDisplayed()
+        capture("guided-before-save-320dp-font130")
+        compose.onNodeWithText("Записать · Даня").performClick()
+        try {
+            // A semantics read drains pending Main/Room continuations in Robolectric. Polling
+            // only the database leaves the click's main-thread coroutine queued indefinitely.
+            waitForText("Даня: 41 × 6 записано")
+        } catch (failure: Throwable) {
+            capture("guided-save-failure-320dp-font130")
+            File("build/ui-renders/guided-save-semantics.txt").writeText(compose.onRoot().printToString())
+            throw failure
+        }
+        runBlocking(Dispatchers.IO) {
+            val id = container.database.workoutDao().getActiveOnce(1)!!.id
+            assertThat(container.database.workoutSetDao().getForWorkoutOnce(id)).hasSize(1)
+        }
+        File("build/ui-renders/guided-before-completion-semantics.txt").writeText(compose.onRoot().printToString())
+        try {
+            // Scroll the lazy container to discover virtualized rows; performScrollTo on a
+            // text node only works while that row is already composed in the viewport.
+            compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено → следующее"))
+            compose.onNodeWithText("Упражнение выполнено → следующее").assertIsEnabled().assertIsDisplayed()
+            File("build/ui-renders/guided-completion-semantics.txt").writeText(compose.onRoot().printToString())
+            capture("guided-exercise-320dp-font130")
+            compose.onNodeWithText("Упражнение выполнено → следующее").performClick()
+            waitForText("Тяга блока")
+        } catch (failure: Throwable) {
+            capture("guided-completion-failure-320dp-font130")
+            File("build/ui-renders/guided-completion-failure-semantics.txt").writeText(compose.onRoot().printToString())
+            throw failure
+        }
+        waitForText("План: упражнение 2 из 2")
+        runBlocking(Dispatchers.IO) {
+            val mine = container.database.workoutDao().getActiveOnce(1)!!.id
+            val friend = container.database.workoutDao().getActiveOnce(friendId)!!.id
+            val myPlan = container.workoutRepository.observePlan(mine).first()
+            assertThat(myPlan.first().completedAt).isNotNull()
+            assertThat(myPlan.last().exerciseId).isEqualTo(secondId)
+            assertThat(myPlan.last().completedAt).isNull()
+            assertThat(container.workoutRepository.observePlan(friend).first().all { it.completedAt == null }).isTrue()
+            val set = container.database.workoutSetDao().getForWorkoutOnce(mine).single()
+            assertThat(set.weightKg).isEqualTo(41.0)
+            assertThat(set.reps).isEqualTo(6)
+            assertThat(container.database.workoutSetDao().getForWorkoutOnce(friend)).isEmpty()
+        }
+    }
+
+    @Test fun saveFriendsWorkoutAsProgram_usesWorkoutOwnerEvenWithDifferentGlobalProfile() {
+        val friendWorkoutId = runBlocking(Dispatchers.IO) {
+            val id = container.workoutRepository.startWorkout(athleteId = friendId)
+            container.workoutRepository.planExercise(id, exerciseId)
+            id
+        }
+        render { TemplatesScreen(onBack = {}, onOpenWorkout = {}, sourceWorkoutId = friendWorkoutId) }
+        waitForText("Профиль: Миша")
+        compose.onNodeWithText("Сохранить", substring = false).performClick()
+        waitForText("Программа сохранена. Можно уточнить ориентиры.")
+        runBlocking(Dispatchers.IO) {
+            assertThat(container.templateRepository.observeTemplates(friendId).first()).hasSize(1)
+            assertThat(container.templateRepository.observeTemplates(1).first()).isEmpty()
+            assertThat(container.profiles.activeId.value).isEqualTo(1)
+        }
     }
 
     @Test fun exercise_preservesDrafts_switchesAfterSave_andUndoTargetsOriginalAthlete() {

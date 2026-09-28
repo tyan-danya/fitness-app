@@ -1,5 +1,8 @@
 package com.dtyan.fitdiary.data.db
 
+import androidx.room.Embedded
+import androidx.room.Ignore
+
 /** Подход вместе с названием упражнения — для списков и экспорта. */
 data class SetWithExercise(
     val id: Long,
@@ -46,3 +49,28 @@ data class WorkoutVolumePoint(
     val startedAt: Long,
     val volume: Double,
 )
+
+data class TemplateExerciseInfo(
+    @Embedded val exercise: Exercise,
+    val position: Int,
+    val targetSets: Int,
+    val targetReps: Int?,
+    val note: String?,
+)
+
+data class TemplateDetails(val template: WorkoutTemplate, val items: List<TemplateExerciseInfo>)
+
+/** Goals and explicit completion belong to this participant's workout, not the template. */
+data class WorkoutPlanEntry(
+    @Embedded val exercise: Exercise,
+    val workoutId: Long,
+    val position: Int,
+    val targetSets: Int?,
+    val targetReps: Int?,
+    val note: String?,
+    val completedAt: Long?,
+    val setCount: Int,
+) {
+    @get:Ignore
+    val exerciseId: Long get() = exercise.id
+}

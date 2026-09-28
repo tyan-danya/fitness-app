@@ -58,6 +58,7 @@ fun WorkoutDetailsScreen(
     workoutId: Long,
     onBack: () -> Unit,
     onRepeatWorkout: ((Long) -> Unit)? = null,
+    onSaveTemplate: ((Long) -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
     val vm: WorkoutDetailsViewModel = viewModel(key = "workout_details_$workoutId") {
@@ -140,6 +141,10 @@ fun WorkoutDetailsScreen(
                     }
                     items(state.groups, key = { it.exerciseId }) { group ->
                         ExerciseGroupCard(group)
+                    }
+                    if (onSaveTemplate != null && state.groups.isNotEmpty()) item(key = "save_template") {
+                        OutlinedButton(onClick = { onSaveTemplate(workoutId) }, enabled = !state.busy,
+                            modifier = Modifier.fillMaxWidth()) { Text("Сохранить как программу") }
                     }
                     if (onRepeatWorkout != null && state.groups.isNotEmpty()) item(key = "repeat") {
                         OutlinedButton(onClick = { vm.repeatWorkout(onRepeatWorkout) },

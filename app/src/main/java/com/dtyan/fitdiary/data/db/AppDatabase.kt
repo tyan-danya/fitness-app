@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class],
-    version = 5,
+    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class, WorkoutTemplate::class, TemplateExercise::class],
+    version = 6,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -20,6 +20,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun mealDao(): MealDao
     abstract fun weightDao(): WeightDao
     abstract fun measurementDao(): MeasurementDao
+    abstract fun templateDao(): TemplateDao
 
     companion object {
         /** v2: у упражнений появились вид оборудования и фото тренажёра. */
@@ -114,6 +115,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6: личные шаблоны и независимые цели/отметки выполнения в плане занятия. */
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE workout_exercises ADD COLUMN targetSets INTEGER")
+                db.execSQL("ALTER TABLE workout_exercises ADD COLUMN targetReps INTEGER")
+                db.execSQL("ALTER TABLE workout_exercises ADD COLUMN note TEXT")
+                db.execSQL("ALTER TABLE workout_exercises ADD COLUMN completedAt INTEGER")
+                db.execSQL("""CREATE TABLE workout_templates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    athleteId INTEGER NOT NULL DEFAULT 1, name TEXT NOT NULL,
+                    FOREIGN KEY(athleteId) REFERENCES athletes(id) ON UPDATE NO ACTION ON DELETE NO ACTION)""")
+                db.execSQL("CREATE INDEX index_workout_templates_athleteId ON workout_templates(athleteId)")
+                db.execSQL("""CREATE TABLE template_exercises (
+                    templateId INTEGER NOT NULL, exerciseId INTEGER NOT NULL, position INTEGER NOT NULL,
+                    targetSets INTEGER NOT NULL DEFAULT 3, targetReps INTEGER, note TEXT,
+                    PRIMARY KEY(templateId, exerciseId),
+                    FOREIGN KEY(templateId) REFERENCES workout_templates(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                    FOREIGN KEY(exerciseId) REFERENCES exercises(id) ON UPDATE NO ACTION ON DELETE NO ACTION)""")
+                db.execSQL("CREATE INDEX index_template_exercises_exerciseId ON template_exercises(exerciseId)")
+            }
+        }
+
         /** Колбэк с предзаполнением каталога упражнений. */
         fun seedCallback(): Callback = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -125,7 +148,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "fitdiary.db")
                 .addCallback(seedCallback())
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

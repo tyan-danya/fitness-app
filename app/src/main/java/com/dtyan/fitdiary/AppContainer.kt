@@ -11,6 +11,8 @@ import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.data.repo.TemplateRepository
+import com.dtyan.fitdiary.data.update.AppUpdater
 import com.dtyan.fitdiary.export.EstimateExchange
 import com.dtyan.fitdiary.export.BackupManager
 
@@ -23,6 +25,8 @@ class AppContainer(context: Context) {
     val profiles = ProfileRepository(appContext, database.athleteDao())
     val settings: SettingsStore = SettingsStore(appContext, profiles.activeId)
     val photoStore: PhotoStore = PhotoStore(appContext)
+    val updater = AppUpdater(appContext)
+    val templateRepository = TemplateRepository(database, profiles.activeId)
 
     val workoutRepository = WorkoutRepository(
         workoutDao = database.workoutDao(),

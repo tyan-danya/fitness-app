@@ -84,6 +84,7 @@ import kotlinx.coroutines.flow.flowOf
 fun HomeScreen(
     onOpenWorkout: (Long) -> Unit,
     onOpenWorkoutDetails: (Long) -> Unit,
+    onOpenTemplates: (() -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
     val vm: HomeViewModel = viewModel {
@@ -128,6 +129,8 @@ fun HomeScreen(
 
         item(key = "actions") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onOpenTemplates != null) OutlinedButton(onClick = onOpenTemplates,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Мои программы") }
                 OutlinedButton(onClick = {
                         requiredIds = if (activeWorkout == null) emptyList() else
                             listOf(activeId) + currentGroup.map { it.athleteId }.filter { it != activeId }

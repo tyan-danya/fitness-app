@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
 import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.*
+import com.dtyan.fitdiary.data.repo.TemplateRepository
+import com.dtyan.fitdiary.data.repo.TemplatePlanItem
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -144,5 +146,84 @@ class BackupManagerTest {
         assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Current diary")
         assertThat(photo.exists()).isTrue()
         manager.discard(preview)
+    }
+
+    @Test fun programsAndIndependentCompletionSurviveRoundTrip() = runTest {
+        seed()
+        val programs = TemplateRepository(db)
+        val id = programs.create("Friend's plan", listOf(TemplatePlanItem(1, 4, 8, "A note")), athleteId = 2)
+        db.openHelper.writableDatabase.execSQL("UPDATE workout_exercises SET targetSets=4,targetReps=8,note='A note',completedAt=3000 WHERE workoutId=1")
+        manager.writeArchive(archive)
+        programs.delete(id, athleteId = 2)
+        db.openHelper.writableDatabase.execSQL("UPDATE workout_exercises SET completedAt=NULL WHERE workoutId=1")
+        val preview = manager.inspectArchive(archive.inputStream())
+        assertThat(preview.templates).isEqualTo(1)
+        manager.restoreBackup(preview)
+        val restored = programs.getTemplate(id, athleteId = 2)!!
+        assertThat(restored.template.name).isEqualTo("Friend's plan")
+        assertThat(restored.items.single().targetSets).isEqualTo(4)
+        assertThat(restored.items.single().targetReps).isEqualTo(8)
+        assertThat(programs.getTemplate(id, athleteId = 1)).isNull()
+        db.openHelper.readableDatabase.query("SELECT completedAt FROM workout_exercises WHERE workoutId=1").use {
+            assertThat(it.moveToFirst()).isTrue()
+            assertThat(it.getLong(0)).isEqualTo(3000L)
+        }
+    }
+
+    @Test fun version15BackupUpgradesWithoutLosingOldDiary() = runTest {
+        seed(); manager.writeArchive(archive)
+        val content = entries(archive).toMutableMap()
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        val tables = document["tables"]!!.jsonObject.toMutableMap().apply {
+            remove("workout_templates"); remove("template_exercises")
+            put("workout_exercises", JsonArray(getValue("workout_exercises").jsonArray.map { row ->
+                JsonObject(row.jsonObject.filterKeys { it in setOf("workoutId", "exerciseId", "position") })
+            }))
+        }
+        content["diary.json"] = JsonObject(document.toMutableMap().apply {
+            put("schemaVersion", JsonPrimitive(5)); put("tables", JsonObject(tables))
+        }).toString().toByteArray(Charsets.UTF_8)
+        val programs = TemplateRepository(db)
+        programs.create("Current program", listOf(TemplatePlanItem(1)))
+        val preview = manager.inspectArchive(ByteArrayInputStream(zip(content)))
+        assertThat(preview.templates).isEqualTo(0)
+        manager.restoreBackup(preview)
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
+        assertThat(db.workoutDao().plannedExerciseIds(1)).containsExactly(1L)
+        db.openHelper.readableDatabase.query("SELECT targetSets,completedAt FROM workout_exercises WHERE workoutId=1").use {
+            assertThat(it.moveToFirst()).isTrue()
+            assertThat(it.isNull(0)).isTrue()
+            assertThat(it.isNull(1)).isTrue()
+        }
+        db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM workout_templates").use {
+            it.moveToFirst(); assertThat(it.getInt(0)).isEqualTo(0)
+        }
+    }
+
+    @Test fun completedExerciseWithoutMatchingActualSetsIsRejectedBeforeRestore() = runTest {
+        seed()
+        // A real set of the same exercise for another participant must not validate this person's completion.
+        db.workoutDao().insert(Workout(id = 2, startedAt = 1000, athleteId = 1))
+        db.workoutDao().insertPlan(WorkoutExercise(2, 1, 1))
+        manager.writeArchive(archive)
+        val content = entries(archive).toMutableMap()
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        val tables = document["tables"]!!.jsonObject.toMutableMap()
+        tables["workout_exercises"] = JsonArray(tables.getValue("workout_exercises").jsonArray.map { element ->
+            val row = element.jsonObject
+            if (row["workoutId"]!!.jsonPrimitive.long == 2L)
+                JsonObject(row.toMutableMap().apply { put("completedAt", JsonPrimitive(3000L)) })
+            else row
+        })
+        content["diary.json"] = JsonObject(document.toMutableMap().apply { put("tables", JsonObject(tables)) })
+            .toString().toByteArray(Charsets.UTF_8)
+
+        val error = runCatching { manager.inspectArchive(ByteArrayInputStream(zip(content))) }.exceptionOrNull()
+        assertThat(error?.message).isEqualTo("Выполненное упражнение без записанных подходов")
+        assertThat(db.workoutDao().getPlanOnce(2).single().completedAt).isNull()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(2)).isEmpty()
+        assertThat(db.workoutSetDao().getForWorkoutOnce(1)).hasSize(1)
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
+        assertThat(settings.settings.value.calorieGoal).isEqualTo(2500)
     }
 }

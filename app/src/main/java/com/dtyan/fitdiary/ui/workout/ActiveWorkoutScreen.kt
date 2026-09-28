@@ -33,6 +33,7 @@ fun ActiveWorkoutScreen(
     onAddExercise: (Long) -> Unit,
     onOpenExercise: (Long, Long) -> Unit,
     onWorkoutClosed: () -> Unit,
+    onSaveTemplate: ((Long) -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
     var selectedId by rememberSaveable(workoutId) { mutableStateOf(workoutId) }
@@ -59,6 +60,7 @@ fun ActiveWorkoutScreen(
             if (next != null) selectedId = next.id else onWorkoutClosed()
         },
         onGroupClosed = onWorkoutClosed,
+        onSaveTemplate = onSaveTemplate?.let { { it(selected.id) } },
     )
 }
 
@@ -74,6 +76,7 @@ private fun ActiveAthleteWorkout(
     onBack: () -> Unit,
     onIndividualClosed: () -> Unit,
     onGroupClosed: () -> Unit,
+    onSaveTemplate: (() -> Unit)?,
 ) {
     val container = LocalContext.current.appContainer
     val vm: ActiveWorkoutViewModel = viewModel(key = "active_workout_${selected.id}") {
@@ -89,6 +92,8 @@ private fun ActiveAthleteWorkout(
     var finishAll by rememberSaveable(selected.id) { mutableStateOf(false) }
     var weights by rememberSaveable(selected.id) { mutableStateOf<Map<Long, String>>(emptyMap()) }
     val active = participants.filter { it.endedAt == null }
+    val planned = groups.filter { it.planned }
+    val next = planned.firstOrNull { !it.completed }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -126,12 +131,29 @@ private fun ActiveAthleteWorkout(
                     style = MaterialTheme.typography.bodyMedium)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
+            if (planned.isNotEmpty()) item("plan_progress") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("План: ${planned.count { it.completed }} из ${planned.size} упражнений выполнено",
+                        style = MaterialTheme.typography.titleMedium)
+                    if (next != null) Button(onClick = { onOpenExercise(next.exerciseId) },
+                        enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Открыть следующее: ${next.name}")
+                    } else Text("Все упражнения отмечены. Можно завершить тренировку.")
+                }
+            }
             if (groups.isEmpty()) item("empty") {
                 Text("Добавьте первое упражнение. Каждый участник записывает свои веса и повторы.",
                     modifier = Modifier.padding(vertical = 24.dp))
             }
             items(groups, key = { it.exerciseId }) { group ->
-                ExerciseGroupCard(group) { if (!busy) onOpenExercise(group.exerciseId) }
+                ExerciseGroupCard(group, !busy,
+                    onToggleComplete = { vm.markComplete(group.exerciseId, !group.completed) },
+                    onClick = { if (!busy) onOpenExercise(group.exerciseId) })
+            }
+            if (onSaveTemplate != null && groups.isNotEmpty()) item("save_template") {
+                OutlinedButton(onClick = onSaveTemplate, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Сохранить как программу")
+                }
             }
         }
     }
@@ -195,7 +217,7 @@ private fun ActiveAthleteWorkout(
 }
 
 @Composable
-private fun ExerciseGroupCard(group: ExerciseGroupUi, onClick: () -> Unit) {
+private fun ExerciseGroupCard(group: ExerciseGroupUi, enabled: Boolean, onToggleComplete: () -> Unit, onClick: () -> Unit) {
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Открыть упражнение", onClick = onClick).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -203,9 +225,18 @@ private fun ExerciseGroupCard(group: ExerciseGroupUi, onClick: () -> Unit) {
                 fallback = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(muscleGroupEmoji(group.muscleGroup)) } })
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(group.name, style = MaterialTheme.typography.titleMedium)
+                if (group.planned) Text(if (group.completed) "✓ Выполнено" else "○ По плану",
+                    style = MaterialTheme.typography.labelLarge)
+                if (group.targetSets != null || group.targetReps != null) Text(
+                    listOfNotNull(group.targetSets?.let { "Подходы: $it" }, group.targetReps?.let { "Повторы: $it" }).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall)
+                group.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 Text(if (group.sets.isEmpty()) "По плану · подходов пока нет" else
                     group.sets.joinToString(" · ") { "${Format.weight(it.weightKg)} × ${it.reps}" },
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (group.planned) TextButton(onClick = onToggleComplete, enabled = enabled && (group.completed || group.sets.isNotEmpty())) {
+                    Text(if (group.completed) "Вернуть в план" else "Отметить выполненным")
+                }
             }
         }
     }

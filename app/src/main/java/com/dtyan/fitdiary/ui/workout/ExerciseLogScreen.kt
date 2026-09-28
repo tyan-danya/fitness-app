@@ -73,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusRequester
@@ -120,6 +121,8 @@ fun ExerciseLogScreen(
     workoutId: Long,
     exerciseId: Long,
     onBack: () -> Unit,
+    onOpenExercise: ((Long, Long) -> Unit)? = null,
+    onPlanComplete: ((Long) -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
     val groupFlow = remember(workoutId) { container.workoutRepository.observeGroupWorkouts(workoutId) }
@@ -145,6 +148,10 @@ fun ExerciseLogScreen(
             val index = available.indexOfFirst { it.id == selected.id }
             selectedId = available[(index + 1) % available.size].id
         }) else null,
+        onNextExercise = { nextExerciseId ->
+            if (nextExerciseId != null && onOpenExercise != null) onOpenExercise(selected.id, nextExerciseId)
+            else if (onPlanComplete != null) onPlanComplete(selected.id) else onBack()
+        },
     )
 }
 
@@ -158,6 +165,7 @@ private fun AthleteExerciseLogScreen(
     onSelect: (Long) -> Unit,
     onNext: (() -> Unit)?,
     onBack: () -> Unit,
+    onNextExercise: (Long?) -> Unit,
 ) {
     val container = LocalContext.current.appContainer
     val vm: ExerciseLogViewModel = viewModel(key = "exercise_log_${workoutId}_$exerciseId") {
@@ -174,6 +182,8 @@ private fun AthleteExerciseLogScreen(
     val todaySets by vm.todaySets.collectAsStateWithLifecycle()
     val weightText by vm.weightText.collectAsStateWithLifecycle()
     val repsText by vm.repsText.collectAsStateWithLifecycle()
+    val plan by vm.plan.collectAsStateWithLifecycle()
+    val plannedExercise = plan.firstOrNull { it.exercise.id == exerciseId }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -225,7 +235,9 @@ private fun AthleteExerciseLogScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            // Reserve space for the receipt/Undo bar so it cannot cover the exercise action
+            // on short screens or with a large system font.
+            bottomBar = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     windowInsets = WindowInsets(0, 0, 0, 0),
@@ -267,6 +279,7 @@ private fun AthleteExerciseLogScreen(
         ) { padding ->
             LazyColumn(
                 modifier = Modifier
+                    .testTag("exercise-log-list")
                     .fillMaxSize()
                     .imePadding()
                     .padding(padding),
@@ -293,6 +306,17 @@ private fun AthleteExerciseLogScreen(
                 }
 
                 item(key = "input") {
+                    plannedExercise?.let { planned ->
+                        Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("План: упражнение ${plan.indexOf(planned) + 1} из ${plan.size}", style = MaterialTheme.typography.titleSmall)
+                            if (planned.targetSets != null || planned.targetReps != null) {
+                                Text(listOfNotNull(planned.targetSets?.let { "Подходы: $it" },
+                                    planned.targetReps?.let { "Повторы: $it" }).joinToString(" · "))
+                                Text("Это ориентир. Запишите свой фактический вес и повторы.", style = MaterialTheme.typography.bodySmall)
+                            }
+                            planned.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                        }
+                    }
                     ui.previousSets.lastOrNull()?.let { previous ->
                         TextButton(onClick = vm::repeatPrevious, enabled = !ui.saving) {
                             Text("Повторить прошлый: ${Format.weight(previous.weightKg)} кг × ${previous.reps}")
@@ -313,6 +337,22 @@ private fun AthleteExerciseLogScreen(
                         onStepChange = vm::setWeightStep,
                     )
                     ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
+                }
+
+                if (plannedExercise != null) item(key = "complete_exercise") {
+                    if (plannedExercise.completedAt != null) {
+                        Text("✓ Это упражнение выполнено", style = MaterialTheme.typography.titleSmall)
+                        TextButton(onClick = vm::reopenExercise, enabled = !ui.saving) { Text("Вернуть упражнение в план") }
+                    } else {
+                        OutlinedButton(onClick = {
+                            focusManager.clearFocus()
+                            vm.completeExercise(onNextExercise)
+                        }, enabled = !ui.saving && todaySets.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                            Text("Упражнение выполнено → следующее", textAlign = TextAlign.Center)
+                        }
+                        Text(if (todaySets.isEmpty()) "Сначала запишите хотя бы один подход."
+                            else "Завершает упражнение только для: $athleteName", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
 
                 item(key = "header_today") {

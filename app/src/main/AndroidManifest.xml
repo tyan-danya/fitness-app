@@ -2,8 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Только для расчёта КБЖУ через ИИ по запросу пользователя; всё остальное офлайн. -->
+    <!-- Расчёт КБЖУ через ИИ и проверка/загрузка обновлений. Дневник работает офлайн. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Напоминание о замерах: уведомление со звуком и перепостановка будильника после перезагрузки -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
