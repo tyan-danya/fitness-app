@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -14,6 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -25,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.dtyan.fitdiary.ui.home.HomeScreen
+import com.dtyan.fitdiary.ui.measure.MeasurementsScreen
 import com.dtyan.fitdiary.ui.nutrition.NutritionScreen
 import com.dtyan.fitdiary.ui.stats.DayDetailsScreen
 import com.dtyan.fitdiary.ui.stats.StatsScreen
@@ -37,6 +40,7 @@ import com.dtyan.fitdiary.ui.workout.ExercisePickerScreen
 object Routes {
     const val HOME = "home"
     const val NUTRITION = "nutrition"
+    const val MEASUREMENTS = "measurements"
     const val STATS = "stats"
     const val ACTIVE_WORKOUT = "workout/{workoutId}"
     const val EXERCISE_PICKER = "workout/{workoutId}/pick"
@@ -56,15 +60,29 @@ private data class TabItem(val route: String, val title: String, val icon: Image
 private val TABS = listOf(
     TabItem(Routes.HOME, "Тренировка", Icons.Filled.FitnessCenter),
     TabItem(Routes.NUTRITION, "Питание", Icons.Filled.Restaurant),
+    TabItem(Routes.MEASUREMENTS, "Замеры", Icons.Filled.Straighten),
     TabItem(Routes.STATS, "Статистика", Icons.Filled.Insights),
 )
 
+/**
+ * Корень навигации. [requestedTab] — вкладка, которую попросили открыть извне
+ * (например, тап по уведомлению о замерах); меняется — переходим на неё.
+ */
 @Composable
-fun AppRoot() {
+fun AppRoot(requestedTab: String? = null) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in TABS.map { it.route }
+
+    LaunchedEffect(requestedTab) {
+        val route = requestedTab?.takeIf { r -> TABS.any { it.route == r } } ?: return@LaunchedEffect
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -76,6 +94,7 @@ fun AppRoot() {
                         val (accent, container) = when (tab.route) {
                             Routes.HOME -> accents.workout to accents.workoutContainer
                             Routes.NUTRITION -> accents.nutrition to accents.nutritionContainer
+                            Routes.MEASUREMENTS -> accents.measure to accents.measureContainer
                             else -> accents.stats to accents.statsContainer
                         }
                         NavigationBarItem(
@@ -117,6 +136,9 @@ fun AppRoot() {
             }
             composable(Routes.NUTRITION) {
                 NutritionScreen()
+            }
+            composable(Routes.MEASUREMENTS) {
+                MeasurementsScreen()
             }
             composable(Routes.STATS) {
                 StatsScreen(

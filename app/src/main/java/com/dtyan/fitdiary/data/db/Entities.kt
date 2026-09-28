@@ -6,6 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.domain.MeasurementType
 import com.dtyan.fitdiary.domain.Per100
 
 /**
@@ -108,4 +109,18 @@ data class WeightEntry(
     val timestamp: Long,
     val weightKg: Double,
     val fromWorkout: Boolean = false,
+)
+
+/**
+ * Замер тела сантиметровой лентой. epochDay — день замера (LocalDate.toEpochDay()),
+ * type — зона (талия, грудь…), valueCm — значение в сантиметрах.
+ */
+@Entity(tableName = "body_measurements", indices = [Index("epochDay"), Index("type")])
+data class BodyMeasurement(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val epochDay: Long,
+    val timestamp: Long,
+    val type: MeasurementType,
+    val valueCm: Double,
+    val note: String? = null,
 )

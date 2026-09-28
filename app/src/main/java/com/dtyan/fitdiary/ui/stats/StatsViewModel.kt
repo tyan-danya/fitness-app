@@ -9,6 +9,7 @@ import com.dtyan.fitdiary.data.db.ExerciseSetPoint
 import com.dtyan.fitdiary.data.db.WeightEntry
 import com.dtyan.fitdiary.data.db.WorkoutSummary
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
+import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
@@ -67,6 +68,7 @@ class StatsViewModel(
     private val nutritionRepository: NutritionRepository,
     private val statsRepository: StatsRepository,
     exerciseRepository: ExerciseRepository,
+    measurementRepository: MeasurementRepository? = null,
 ) : ViewModel() {
 
     private val exportManager = ExportManager(
@@ -74,6 +76,7 @@ class StatsViewModel(
         workoutRepository = workoutRepository,
         nutritionRepository = nutritionRepository,
         statsRepository = statsRepository,
+        measurementRepository = measurementRepository,
     )
 
     private val zone: ZoneId = ZoneId.systemDefault()

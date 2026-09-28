@@ -11,6 +11,7 @@ import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.ai.NutritionEstimator
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
+import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
@@ -38,6 +39,7 @@ class AppContainer(context: Context) {
         setDao = database.workoutSetDao(),
     )
     val nutritionRepository = NutritionRepository(mealDao = database.mealDao())
+    val measurementRepository = MeasurementRepository(dao = database.measurementDao())
     val statsRepository = StatsRepository(
         workoutDao = database.workoutDao(),
         setDao = database.workoutSetDao(),

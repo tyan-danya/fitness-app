@@ -101,6 +101,7 @@ fun StatsScreen(
             nutritionRepository = container.nutritionRepository,
             statsRepository = container.statsRepository,
             exerciseRepository = container.exerciseRepository,
+            measurementRepository = container.measurementRepository,
         )
     }
 
@@ -191,7 +192,7 @@ fun StatsScreen(
                     SectionCard {
                         BarChart(
                             bars = weeklyVolume.map { it.monday.format(DAY_MONTH) to it.volumeKg },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp),
+                            modifier = Modifier.fillMaxWidth().height(240.dp),
                             valueFormatter = { Format.volume(it) },
                         )
                     }
@@ -409,7 +410,8 @@ private fun WeightSectionContent(
         LineChart(
             points = state.chartPoints,
             color = fitAccents.stats,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+            modifier = Modifier.fillMaxWidth().height(230.dp),
+            minSpan = 2.0, // ±1 кг вокруг данных: динамика в 1–2 кг видна, шум в 100 г не растянут
             valueFormatter = { Format.weight(it) },
         )
     }
@@ -548,7 +550,8 @@ private fun ExerciseProgressContent(
                 LineChart(
                     points = state.points,
                     color = fitAccents.workout,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp),
+                    modifier = Modifier.fillMaxWidth().height(230.dp),
+                    minSpan = 10.0,
                     valueFormatter = { Format.weight(it) },
                 )
                 if (state.recordWeightKg != null && state.recordReps != null) {

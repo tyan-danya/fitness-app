@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
@@ -29,6 +30,17 @@ private data class ExportRoot(
     val bodyWeights: List<ExportBodyWeight>,
     val workouts: List<ExportWorkout>,
     val meals: List<ExportMeal>,
+    val measurements: List<ExportMeasurement> = emptyList(),
+)
+
+@Serializable
+private data class ExportMeasurement(
+    val date: String,
+    val time: String,
+    val type: String,
+    val title: String,
+    val valueCm: Double,
+    val note: String? = null,
 )
 
 @Serializable
@@ -86,6 +98,7 @@ class ExportManager(
     private val workoutRepository: WorkoutRepository,
     private val nutritionRepository: NutritionRepository,
     private val statsRepository: StatsRepository,
+    private val measurementRepository: MeasurementRepository? = null,
 ) {
 
     private val json = Json {
@@ -159,6 +172,16 @@ class ExportManager(
             },
             workouts = workouts,
             meals = meals,
+            measurements = measurementRepository?.getAllOnce().orEmpty().map { m ->
+                ExportMeasurement(
+                    date = LocalDate.ofEpochDay(m.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
+                    time = timeHm(m.timestamp),
+                    type = m.type.name,
+                    title = m.type.title,
+                    valueCm = m.valueCm,
+                    note = m.note,
+                )
+            },
         )
         return json.encodeToString(root)
     }
@@ -232,6 +255,24 @@ class ExportManager(
         return sb.toString()
     }
 
+    suspend fun buildMeasurementsCsv(): String {
+        val sb = StringBuilder()
+        sb.appendLine(row("date", "time", "type", "title", "value_cm", "note"))
+        for (m in measurementRepository?.getAllOnce().orEmpty()) {
+            sb.appendLine(
+                row(
+                    LocalDate.ofEpochDay(m.epochDay).format(DateTimeFormatter.ISO_LOCAL_DATE),
+                    timeHm(m.timestamp),
+                    m.type.name,
+                    m.type.title,
+                    csvNum(m.valueCm),
+                    m.note.orEmpty(),
+                )
+            )
+        }
+        return sb.toString()
+    }
+
     suspend fun buildWeightsCsv(): String {
         val sb = StringBuilder()
         sb.appendLine(row("date", "time", "weight_kg", "from_workout"))
@@ -274,7 +315,7 @@ class ExportManager(
         }
     }
 
-    /** Три CSV (подходы, питание, вес) с BOM для Excel → chooser. */
+    /** Четыре CSV (подходы, питание, вес, замеры) с BOM для Excel → chooser. */
     suspend fun exportCsv(): Intent = withContext(Dispatchers.IO) {
         val stamp = todayStamp()
         val bom = "\uFEFF" // BOM — чтобы русский Excel распознал UTF-8
@@ -282,6 +323,7 @@ class ExportManager(
             "fitdiary-sets-$stamp.csv" to buildWorkoutSetsCsv(),
             "fitdiary-meals-$stamp.csv" to buildMealsCsv(),
             "fitdiary-weights-$stamp.csv" to buildWeightsCsv(),
+            "fitdiary-measurements-$stamp.csv" to buildMeasurementsCsv(),
         ).map { (name, content) ->
             File(exportsDir(), name).apply { writeText(bom + content, Charsets.UTF_8) }
         }

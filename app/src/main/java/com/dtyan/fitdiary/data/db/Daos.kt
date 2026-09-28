@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.domain.MeasurementType
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -228,4 +229,35 @@ interface WeightDao {
 
     @Delete
     suspend fun delete(entry: WeightEntry)
+}
+
+@Dao
+interface MeasurementDao {
+    @Query("SELECT * FROM body_measurements ORDER BY timestamp, id")
+    fun observeAll(): Flow<List<BodyMeasurement>>
+
+    @Query("SELECT * FROM body_measurements ORDER BY timestamp, id")
+    suspend fun getAllOnce(): List<BodyMeasurement>
+
+    @Query("SELECT * FROM body_measurements WHERE type = :type ORDER BY timestamp, id")
+    suspend fun getForType(type: MeasurementType): List<BodyMeasurement>
+
+    @Query("SELECT * FROM body_measurements WHERE epochDay = :epochDay ORDER BY timestamp, id")
+    suspend fun getForDayOnce(epochDay: Long): List<BodyMeasurement>
+
+    /** День последнего замера любой зоны (для напоминания); null — замеров ещё не было. */
+    @Query("SELECT MAX(epochDay) FROM body_measurements")
+    suspend fun lastEpochDay(): Long?
+
+    @Query("SELECT MAX(epochDay) FROM body_measurements")
+    fun observeLastEpochDay(): Flow<Long?>
+
+    @Insert
+    suspend fun insertAll(items: List<BodyMeasurement>): List<Long>
+
+    @Update
+    suspend fun update(item: BodyMeasurement)
+
+    @Delete
+    suspend fun delete(item: BodyMeasurement)
 }

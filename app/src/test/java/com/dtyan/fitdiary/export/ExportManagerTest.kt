@@ -5,8 +5,10 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Exercise
+import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
+import com.dtyan.fitdiary.domain.MeasurementType
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -41,6 +43,7 @@ class ExportManagerTest {
     private lateinit var workoutRepo: WorkoutRepository
     private lateinit var nutritionRepo: NutritionRepository
     private lateinit var statsRepo: StatsRepository
+    private lateinit var measurementRepo: MeasurementRepository
     private lateinit var manager: ExportManager
 
     /** Фиксированное время: 2026-08-01T10:00 Europe/Moscow. */
@@ -67,7 +70,8 @@ class ExportManagerTest {
         workoutRepo = WorkoutRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
         nutritionRepo = NutritionRepository(db.mealDao())
         statsRepo = StatsRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
-        manager = ExportManager(context, workoutRepo, nutritionRepo, statsRepo)
+        measurementRepo = MeasurementRepository(db.measurementDao())
+        manager = ExportManager(context, workoutRepo, nutritionRepo, statsRepo, measurementRepo)
     }
 
     @After
@@ -246,5 +250,31 @@ class ExportManagerTest {
         val fromWorkout = lines[2].split(";")
         assertThat(fromWorkout[2]).isEqualTo("82,5")
         assertThat(fromWorkout[3]).isEqualTo("1")
+    }
+
+    // ---------- Замеры ----------
+
+    @Test
+    fun measurements_inJsonAndCsv() = runTest {
+        seedData()
+        measurementRepo.addSession(
+            mapOf(MeasurementType.WAIST to 91.5, MeasurementType.CHEST to 104.0),
+            now = t0,
+            note = "утром; до еды",
+        )
+
+        val root = Json.parseToJsonElement(manager.buildJsonString()).jsonObject
+        val items = root["measurements"]!!.jsonArray
+        assertThat(items).hasSize(2)
+        val waist = items.map { it.jsonObject }.first { it["type"]!!.jsonPrimitive.content == "WAIST" }
+        assertThat(waist["title"]!!.jsonPrimitive.content).isEqualTo("Талия")
+        assertThat(waist["valueCm"]!!.jsonPrimitive.double).isEqualTo(91.5)
+        assertThat(waist["note"]!!.jsonPrimitive.content).isEqualTo("утром; до еды")
+
+        val lines = manager.buildMeasurementsCsv().trimEnd('\n').split("\n")
+        assertThat(lines[0]).isEqualTo("date;time;type;title;value_cm;note")
+        assertThat(lines).hasSize(3)
+        assertThat(lines[1]).contains(";WAIST;Талия;91,5;\"утром; до еды\"") // «;» в заметке → кавычки
+        assertThat(lines[2]).contains(";CHEST;Грудь;104;")
     }
 }

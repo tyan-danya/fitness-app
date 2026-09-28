@@ -1,6 +1,8 @@
 package com.dtyan.fitdiary.data
 
 import android.content.Context
+import com.dtyan.fitdiary.domain.MeasurementType
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +21,14 @@ class SettingsStore(context: Context) {
         val aiBaseUrl: String = DEFAULT_AI_BASE_URL,
         val aiModel: String = DEFAULT_AI_MODEL,
         val aiApiKey: String = "",
+        /** Какие зоны замеряем. */
+        val trackedMeasurements: Set<MeasurementType> = MeasurementType.DEFAULT_TRACKED,
+        /** Напоминание «давно не было замеров»: включено, через сколько дней тишины, в какой час. */
+        val measurementReminderEnabled: Boolean = true,
+        val measurementReminderDays: Int = 3,
+        val measurementReminderHour: Int = 20,
+        /** День (epochDay), с которого считаем тишину, если замеров ещё не было. */
+        val measurementReminderSinceDay: Long = LocalDate.now().toEpochDay(),
     ) {
         /** Ключ задан — кнопка «Рассчитать» в форме приёма активна. */
         val aiConfigured: Boolean get() = aiApiKey.isNotBlank() && aiBaseUrl.isNotBlank() && aiModel.isNotBlank()
@@ -30,6 +40,14 @@ class SettingsStore(context: Context) {
     }
 
     private val prefs = context.getSharedPreferences("fitdiary_settings", Context.MODE_PRIVATE)
+
+    init {
+        // Точка отсчёта тишины для напоминания фиксируется при первом запуске, иначе
+        // «сегодня» сдвигалось бы при каждом старте и напоминание не сработало бы никогда.
+        if (!prefs.contains("measurementReminderSinceDay")) {
+            prefs.edit().putLong("measurementReminderSinceDay", LocalDate.now().toEpochDay()).apply()
+        }
+    }
 
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<Settings> = _settings.asStateFlow()
@@ -46,6 +64,12 @@ class SettingsStore(context: Context) {
             aiBaseUrl = prefs.getString("aiBaseUrl", d.aiBaseUrl) ?: d.aiBaseUrl,
             aiModel = prefs.getString("aiModel", d.aiModel) ?: d.aiModel,
             aiApiKey = prefs.getString("aiApiKey", d.aiApiKey) ?: d.aiApiKey,
+            trackedMeasurements = prefs.getString("trackedMeasurements", null)
+                ?.let { MeasurementType.parseSet(it) } ?: d.trackedMeasurements,
+            measurementReminderEnabled = prefs.getBoolean("measurementReminderEnabled", d.measurementReminderEnabled),
+            measurementReminderDays = prefs.getInt("measurementReminderDays", d.measurementReminderDays),
+            measurementReminderHour = prefs.getInt("measurementReminderHour", d.measurementReminderHour),
+            measurementReminderSinceDay = prefs.getLong("measurementReminderSinceDay", d.measurementReminderSinceDay),
         )
     }
 
@@ -61,6 +85,11 @@ class SettingsStore(context: Context) {
             .putString("aiBaseUrl", next.aiBaseUrl)
             .putString("aiModel", next.aiModel)
             .putString("aiApiKey", next.aiApiKey)
+            .putString("trackedMeasurements", MeasurementType.encodeSet(next.trackedMeasurements))
+            .putBoolean("measurementReminderEnabled", next.measurementReminderEnabled)
+            .putInt("measurementReminderDays", next.measurementReminderDays)
+            .putInt("measurementReminderHour", next.measurementReminderHour)
+            .putLong("measurementReminderSinceDay", next.measurementReminderSinceDay)
             .apply()
         _settings.value = next
     }

@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class],
-    version = 3,
+    entities = [Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -18,6 +18,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workoutSetDao(): WorkoutSetDao
     abstract fun mealDao(): MealDao
     abstract fun weightDao(): WeightDao
+    abstract fun measurementDao(): MeasurementDao
 
     companion object {
         /** v2: у упражнений появились вид оборудования и фото тренажёра. */
@@ -54,6 +55,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4: таблица замеров тела (талия, грудь, руки…). */
+        val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `body_measurements` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`epochDay` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, `type` TEXT NOT NULL, " +
+                        "`valueCm` REAL NOT NULL, `note` TEXT)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_body_measurements_epochDay` ON `body_measurements` (`epochDay`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_body_measurements_type` ON `body_measurements` (`type`)")
+            }
+        }
+
         /** Колбэк с предзаполнением каталога упражнений. */
         fun seedCallback(): Callback = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -64,7 +78,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "fitdiary.db")
                 .addCallback(seedCallback())
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

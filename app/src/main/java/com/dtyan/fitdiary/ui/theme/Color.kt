@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 /**
  * Фирменные акценты разделов и вспомогательные цвета,
  * которых нет в стандартной схеме Material3.
- * Раздел «Тренировки» — зелёный, «Питание» — оранжевый, «Статистика» — фиолетовый.
+ * Раздел «Тренировки» — зелёный, «Питание» — оранжевый, «Замеры» — бирюзовый, «Статистика» — фиолетовый.
  */
 data class FitAccents(
     val workout: Color,
@@ -23,6 +23,9 @@ data class FitAccents(
     val statsContainer: Color,
     val onStatsContainer: Color,
     val statsGradient: List<Color>,
+    val measure: Color,
+    val measureContainer: Color,
+    val onMeasureContainer: Color,
     /** Цвета макронутриентов: белки/жиры/углеводы. */
     val protein: Color,
     val fat: Color,
@@ -44,6 +47,9 @@ val LightFitAccents = FitAccents(
     statsContainer = Color(0xFFF3E8FF),
     onStatsContainer = Color(0xFF4C1D95),
     statsGradient = listOf(Color(0xFF8B5CF6), Color(0xFF6366F1)),
+    measure = Color(0xFF0D9488),
+    measureContainer = Color(0xFFCCFBF1),
+    onMeasureContainer = Color(0xFF134E4A),
     protein = Color(0xFF0EA5E9),
     fat = Color(0xFFF59E0B),
     carbs = Color(0xFFA855F7),
@@ -63,6 +69,9 @@ val DarkFitAccents = FitAccents(
     statsContainer = Color(0xFF2E2547),
     onStatsContainer = Color(0xFFE9D5FF),
     statsGradient = listOf(Color(0xFF8B5CF6), Color(0xFF4F46E5)),
+    measure = Color(0xFF2DD4BF),
+    measureContainer = Color(0xFF173F3B),
+    onMeasureContainer = Color(0xFF99F6E4),
     protein = Color(0xFF38BDF8),
     fat = Color(0xFFFBBF24),
     carbs = Color(0xFFC084FC),

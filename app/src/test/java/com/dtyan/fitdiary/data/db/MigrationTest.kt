@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.domain.MeasurementType
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -17,7 +18,7 @@ import java.time.ZoneId
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Тесты миграций 1→2 и 2→3.
+ * Тесты миграций 1→2, 2→3 и 3→4.
  *
  * MigrationTestHelper под Robolectric не работает: AGP не кладёт assets
  * test-sourceSet-а в android_merged_assets / apk-for-local-test, поэтому
@@ -200,7 +201,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
             .allowMainThreadQueries()
             .build()
         try {
@@ -310,7 +311,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
             .allowMainThreadQueries()
             .build()
         try {
@@ -323,6 +324,56 @@ class MigrationTest {
             db.mealDao().setMealType(meal.id, MealType.DINNER)
             assertThat(db.mealDao().getByIds(listOf(meal.id)).single().mealType).isEqualTo(MealType.DINNER)
             assertThat(db.mealDao().getPendingEstimatesOnce()).isEmpty()
+        } finally {
+            db.close()
+        }
+    }
+
+    // ---------- 3 → 4: замеры тела ----------
+
+    @Test
+    fun migrate3to4_createsMeasurementsTable_withIndices() {
+        // Схема v3 = v2 + колонки meals; строим v2 и прогоняем 2→3 настоящей миграцией
+        val db = createV2DatabaseWithMeals(listOf(localMillis(13)))
+        AppDatabase.MIGRATION_2_3.migrate(db)
+        assertThat(db.tableInfo("body_measurements")).isEmpty()
+
+        AppDatabase.MIGRATION_3_4.migrate(db)
+
+        val columns = db.tableInfo("body_measurements")
+        assertThat(columns.keys).containsExactly("id", "epochDay", "timestamp", "type", "valueCm", "note")
+        assertThat(columns.getValue("type").type).isEqualTo("TEXT")
+        assertThat(columns.getValue("type").notNull).isTrue()
+        assertThat(columns.getValue("valueCm").type).isEqualTo("REAL")
+        assertThat(columns.getValue("note").notNull).isFalse()
+        db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'body_measurements'").use { c ->
+            val names = mutableListOf<String>()
+            while (c.moveToNext()) names += c.getString(0)
+            assertThat(names).containsAtLeast("index_body_measurements_epochDay", "index_body_measurements_type")
+        }
+        // Старые данные целы
+        db.query("SELECT COUNT(*) FROM meals").use { c -> c.moveToFirst(); assertThat(c.getInt(0)).isEqualTo(1) }
+    }
+
+    @Test
+    fun roomOpens_v2File_runsAllMigrations_andMeasurementDaoWorks() = runTest {
+        createV2DatabaseWithMeals(listOf(localMillis(9)))
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            // onValidateSchema прошёл — таблица замеров совпала со схемой v4; DAO пишет и читает enum
+            assertThat(db.measurementDao().lastEpochDay()).isNull()
+            db.measurementDao().insertAll(
+                listOf(BodyMeasurement(epochDay = 20100, timestamp = 5L, type = MeasurementType.WAIST, valueCm = 91.5))
+            )
+            val stored = db.measurementDao().getForType(MeasurementType.WAIST).single()
+            assertThat(stored.valueCm).isEqualTo(91.5)
+            assertThat(db.measurementDao().lastEpochDay()).isEqualTo(20100L)
+            assertThat(db.mealDao().getForDayOnce(20000).single().mealType).isEqualTo(MealType.BREAKFAST)
         } finally {
             db.close()
         }
