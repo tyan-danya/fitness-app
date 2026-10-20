@@ -10,6 +10,12 @@ import androidx.core.content.FileProvider
 import androidx.room.withTransaction
 import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.AppDatabase
+import com.dtyan.fitdiary.data.repo.ActivityDefinitionInput
+import com.dtyan.fitdiary.data.repo.ActivityEntryInput
+import com.dtyan.fitdiary.data.repo.ActivityRepository
+import com.dtyan.fitdiary.domain.ActivityKind
+import com.dtyan.fitdiary.domain.ActivityMetric
+import com.dtyan.fitdiary.domain.ActivityProgression
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -40,6 +46,7 @@ class BackupManager(
         val photos: Int,
         val measurements: Int,
         val templates: Int = 0,
+        val activities: Int = 0,
     )
 
     private val mutex = Mutex()
@@ -54,8 +61,10 @@ class BackupManager(
         private const val MAX_TOTAL = 256L * 1024 * 1024
         private const val MAX_ENTRIES = 2001
         private const val MAX_ROWS = 200_000
-        private val TABLES = listOf("athletes", "exercises", "workout_templates", "template_exercises", "workouts", "workout_sets", "workout_exercises", "meals", "weight_entries", "body_measurements")
-        private val V5_TABLES = TABLES.filterNot { it in setOf("workout_templates", "template_exercises") }.toSet()
+        private val V6_TABLES = listOf("athletes", "exercises", "workout_templates", "template_exercises", "workouts", "workout_sets", "workout_exercises", "meals", "weight_entries", "body_measurements")
+        private val ACTIVITY_TABLES = listOf("activity_definitions", "activity_plans", "activity_entries", "activity_timers")
+        private val TABLES = V6_TABLES + ACTIVITY_TABLES
+        private val V5_TABLES = V6_TABLES.filterNot { it in setOf("workout_templates", "template_exercises") }.toSet()
         private val PHOTO_PATH = Regex("exercise_photos/[A-Za-z0-9_-]+\\.jpg")
     }
 
@@ -116,6 +125,9 @@ class BackupManager(
         val tables = buildJsonObject {
             for (table in TABLES) {
                 put(table, buildJsonArray {
+                    // An unsaved stopwatch is tied to this device's monotonic clock.
+                    // Only explicitly recorded performances belong in a portable backup.
+                    if (table == "activity_timers") return@buildJsonArray
                     val order = when (table) {
                         "workout_exercises" -> "workoutId, position"
                         "template_exercises" -> "templateId, position"
@@ -176,7 +188,8 @@ class BackupManager(
             val tables = document["tables"]!!.jsonObject
             BackupPreview(stage, document, tables["athletes"]!!.jsonArray.size,
                 tables["workouts"]!!.jsonArray.size, tables["meals"]!!.jsonArray.size,
-                referenced.size, tables["body_measurements"]!!.jsonArray.size, tables["workout_templates"]!!.jsonArray.size)
+                referenced.size, tables["body_measurements"]!!.jsonArray.size, tables["workout_templates"]!!.jsonArray.size,
+                tables["activity_entries"]!!.jsonArray.size)
         } catch (e: Throwable) {
             stage.deleteRecursively()
             throw e
@@ -248,28 +261,31 @@ class BackupManager(
 
     private data class Column(val name: String, val type: String, val required: Boolean)
 
-    /** Version 1.5 backups remain usable; new program/completion state did not exist in schema 5. */
+    /** Upgrade portable data without inventing historical targets or performances. */
     private fun upgradeDocument(document: JsonObject): JsonObject {
-        if (document["schemaVersion"]?.jsonPrimitive?.intOrNull != 5 || database.openHelper.writableDatabase.version != 6) return document
+        val version = document["schemaVersion"]?.jsonPrimitive?.intOrNull
+        if (version !in setOf(5, 6) || database.openHelper.writableDatabase.version != 7) return document
         require(document["format"]?.jsonPrimitive?.content == FORMAT) { "Неизвестный формат резервной копии" }
         val tables = document["tables"] as? JsonObject ?: error("Отсутствует дневник")
-        require(tables.keys == V5_TABLES) { "Неполный набор таблиц старой копии" }
-        val oldPlan = tables["workout_exercises"] as? JsonArray ?: error("Отсутствует план тренировки")
-        val plan = oldPlan.map { element ->
-            val row = element as? JsonObject ?: error("Некорректная запись плана")
-            require(row.keys == setOf("workoutId", "exerciseId", "position")) { "Некорректная структура старого плана" }
-            JsonObject(row.toMutableMap().apply {
-                put("targetSets", JsonNull); put("targetReps", JsonNull)
-                put("note", JsonNull); put("completedAt", JsonNull)
+        require(tables.keys == if (version == 5) V5_TABLES else V6_TABLES.toSet()) { "Неполный набор таблиц старой копии" }
+        val upgraded = tables.toMutableMap()
+        if (version == 5) {
+            val oldPlan = tables["workout_exercises"] as? JsonArray ?: error("Отсутствует план тренировки")
+            upgraded["workout_exercises"] = JsonArray(oldPlan.map { element ->
+                val row = element as? JsonObject ?: error("Некорректная запись плана")
+                require(row.keys == setOf("workoutId", "exerciseId", "position")) { "Некорректная структура старого плана" }
+                JsonObject(row.toMutableMap().apply {
+                    put("targetSets", JsonNull); put("targetReps", JsonNull)
+                    put("note", JsonNull); put("completedAt", JsonNull)
+                })
             })
+            upgraded["workout_templates"] = JsonArray(emptyList())
+            upgraded["template_exercises"] = JsonArray(emptyList())
         }
+        ACTIVITY_TABLES.forEach { upgraded[it] = JsonArray(emptyList()) }
         return JsonObject(document.toMutableMap().apply {
-            put("schemaVersion", JsonPrimitive(6))
-            put("tables", JsonObject(tables.toMutableMap().apply {
-                put("workout_exercises", JsonArray(plan))
-                put("workout_templates", JsonArray(emptyList()))
-                put("template_exercises", JsonArray(emptyList()))
-            }))
+            put("schemaVersion", JsonPrimitive(7))
+            put("tables", JsonObject(upgraded))
         })
     }
 
@@ -280,6 +296,9 @@ class BackupManager(
         settings.validateSafeSettings(document["settings"]?.toString() ?: error("Отсутствуют настройки"))
         val tables = document["tables"] as? JsonObject ?: error("Отсутствует дневник")
         require(tables.keys == TABLES.toSet()) { "Неполный набор таблиц" }
+        require((tables["activity_timers"] as? JsonArray)?.isEmpty() == true) {
+            "Перенос незаписанного секундомера между устройствами не поддерживается"
+        }
         val ids = mutableMapOf<String, Set<Long>>()
         var totalRows = 0
         for (table in TABLES) {
@@ -305,7 +324,8 @@ class BackupManager(
                         when (column.type.uppercase()) {
                             "INTEGER" -> require(!primitive.isString && primitive.longOrNull != null) { "Некорректное целое число" }
                             "REAL" -> require(!primitive.isString && primitive.doubleOrNull?.isFinite() == true) { "Некорректное число" }
-                            "TEXT" -> require(primitive.isString && primitive.content.length <= 100_000) { "Некорректный текст" }
+                            "TEXT" -> require(primitive.isString && primitive.content.length <=
+                                if (table == "activity_plans" && column.name == "documentJson") TemplateExchange.MAX_BYTES else 100_000) { "Некорректный текст" }
                             else -> error("Неподдерживаемый тип поля")
                         }
                     }
@@ -322,7 +342,7 @@ class BackupManager(
                     require(id > 0 && rowIds.add(id)) { "Повторяющиеся идентификаторы" }
                 }
                 row["athleteId"]?.let { require(it.jsonPrimitive.long > 0) { "Некорректный профиль" } }
-                for (flag in listOf("isArchived", "isCustom", "needsEstimate", "fromWorkout")) {
+                for (flag in listOf("isArchived", "isCustom", "needsEstimate", "fromWorkout", "isClean")) {
                     row[flag]?.let { require(it.jsonPrimitive.int in 0..1) { "Некорректный флаг $flag" } }
                 }
                 for (field in listOf("weightKg", "valueCm", "calories", "proteinG", "fatG", "carbsG", "servingG", "caloriesPer100", "proteinPer100", "fatPer100", "carbsPer100")) {
@@ -345,7 +365,7 @@ class BackupManager(
             it.jsonObject["id"]!!.jsonPrimitive.long == 1L && it.jsonObject["isArchived"]!!.jsonPrimitive.int == 0
         }) { "Основной профиль отсутствует или скрыт" }
         val profiles = ids.getValue("athletes")
-        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates")) {
+        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates", "activity_definitions", "activity_plans")) {
             tables[table]!!.jsonArray.forEach { require(it.jsonObject["athleteId"]!!.jsonPrimitive.long in profiles) { "Запись без профиля" } }
         }
         val workouts = tables["workouts"]!!.jsonArray.map { it.jsonObject }
@@ -384,8 +404,61 @@ class BackupManager(
                 require(workout != null && workout["athleteId"] == row["athleteId"]) { "Замер веса связан с чужой тренировкой" }
             }
         }
+        validateActivities(tables)
         photoPaths(document).forEach { require(PHOTO_PATH.matches(it)) { "Некорректный путь фотографии" } }
     }
+
+    private fun validateActivities(tables: JsonObject) {
+        val definitions = tables.getValue("activity_definitions").jsonArray.map { it.jsonObject }
+        val keys = mutableSetOf<Pair<Long, String>>()
+        val definitionMap = definitions.associateBy { it.getValue("id").jsonPrimitive.long }
+        for (row in definitions) {
+            val key = row.getValue("key").jsonPrimitive.content
+            require(keys.add(row.getValue("athleteId").jsonPrimitive.long to key)) { "Повторяется ключ активности профиля" }
+            ActivityRepository.validateDefinition(ActivityDefinitionInput(
+                key, row.getValue("name").jsonPrimitive.content,
+                ActivityKind.valueOf(row.getValue("kind").jsonPrimitive.content),
+                ActivityMetric.valueOf(row.getValue("goalMetric").jsonPrimitive.content),
+                ActivityProgression.decodeGoals(row.getValue("goalsJson").jsonPrimitive.content),
+                row.getValue("instructions").jsonPrimitive.content,
+                row.optionalPrimitive("weeklyScheduleNote")?.content,
+                row.getValue("sortOrder").jsonPrimitive.int,
+            ))
+        }
+        val tokens = mutableSetOf<String>()
+        tables.getValue("activity_entries").jsonArray.forEach { element ->
+            val row = element.jsonObject
+            val definition = definitionMap[row.getValue("activityId").jsonPrimitive.long]
+            require(definition != null && definition["athleteId"] == row["athleteId"]) { "Активность связана с чужим профилем" }
+            val token = row.getValue("clientToken").jsonPrimitive.content
+            require(tokens.add(token)) { "Повторяющаяся запись активности" }
+            require(row.getValue("timestamp").jsonPrimitive.long >= 0) { "Некорректное время активности" }
+            ActivityRepository.validateEntry(ActivityKind.valueOf(definition.getValue("kind").jsonPrimitive.content),
+                ActivityEntryInput(
+                    epochDay = row.getValue("epochDay").jsonPrimitive.long,
+                    reps = row.optionalPrimitive("reps")?.int,
+                    durationSeconds = row.optionalPrimitive("durationSeconds")?.long,
+                    distanceKm = row.optionalPrimitive("distanceKm")?.double,
+                    steps = row.optionalPrimitive("steps")?.long,
+                    speedKmh = row.optionalPrimitive("speedKmh")?.double,
+                    inclinePercent = row.optionalPrimitive("inclinePercent")?.double,
+                    note = row.optionalPrimitive("note")?.content,
+                    isClean = row.getValue("isClean").jsonPrimitive.int == 1,
+                    clientToken = token,
+                ))
+        }
+        val planKeys = mutableSetOf<Pair<Long, String>>()
+        tables.getValue("activity_plans").jsonArray.forEach { element ->
+            val row = element.jsonObject
+            val plan = PlanBundleExchange.parse(row.getValue("documentJson").jsonPrimitive.content)
+            require(plan.key == row.getValue("planKey").jsonPrimitive.content &&
+                plan.name == row.getValue("name").jsonPrimitive.content) { "Содержимое расписания не соответствует названию или ключу" }
+            require(planKeys.add(row.getValue("athleteId").jsonPrimitive.long to plan.key)) { "Повторяется расписание профиля" }
+        }
+    }
+
+    private fun JsonObject.optionalPrimitive(key: String): JsonPrimitive? =
+        get(key)?.takeUnless { it == JsonNull }?.jsonPrimitive
 
     private fun photoPaths(document: JsonObject): Set<String> = document["tables"]!!.jsonObject["exercises"]!!.jsonArray
         .mapNotNull { it.jsonObject["photoPath"]?.takeUnless { value -> value == JsonNull }?.jsonPrimitive?.content }.toSet()

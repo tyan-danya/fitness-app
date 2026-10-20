@@ -24,7 +24,7 @@ data class UpdateManifest(
     companion object {
         const val PROJECT_ID = "205c5b37-6bd5-4ea2-9f02-8f86f39935f9"
         const val PACKAGE_NAME = "com.dtyan.fitdiary"
-        const val HOST = "xn--12-6kcif3a1ap9a.xn--p1ai"
+        const val HOST = "xn--b1aadfqb1a2ahe.xn--p1ai"
         const val BASE_URL = "https://$HOST/apps/$PROJECT_ID"
         const val MANIFEST_URL = "$BASE_URL/latest.json"
         const val MAX_APK_BYTES = 150L * 1024 * 1024

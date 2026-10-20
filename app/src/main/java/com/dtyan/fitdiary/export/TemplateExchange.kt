@@ -17,7 +17,9 @@ object TemplateExchange {
     private val json = Json { prettyPrint = true }
     private val fields = setOf("name", "muscleGroup", "equipment", "targetSets", "targetReps", "note")
 
-    fun parse(input: InputStream): TemplateImportPreview {
+    fun parse(input: InputStream): TemplateImportPreview = parse(readText(input))
+
+    fun readText(input: InputStream): String {
         val bytes = input.readBytesBounded(MAX_BYTES)
         val text = try {
             Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
@@ -25,7 +27,7 @@ object TemplateExchange {
         } catch (_: Exception) {
             throw IllegalArgumentException("Сохраните файл программы в кодировке UTF-8")
         }
-        return parse(text)
+        return text
     }
 
     fun parse(text: String): TemplateImportPreview {

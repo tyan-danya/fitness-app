@@ -11,12 +11,17 @@ import com.dtyan.fitdiary.data.repo.TemplatePlanItem
 import com.dtyan.fitdiary.data.repo.TemplateRepository
 import com.dtyan.fitdiary.export.TemplateExchange
 import com.dtyan.fitdiary.export.TemplateImportPreview
+import com.dtyan.fitdiary.export.PlanBundleExchange
+import com.dtyan.fitdiary.export.PlanBundlePreview
+import com.dtyan.fitdiary.data.repo.PlanBundleRepository
+import com.dtyan.fitdiary.data.db.ActivityPlan
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -39,6 +44,7 @@ class TemplatesViewModel(
     exerciseRepository: ExerciseRepository,
     private val ownerId: Long,
     private val savedState: SavedStateHandle = SavedStateHandle(),
+    private val plans: PlanBundleRepository? = null,
 ) : ViewModel() {
     val templates = repository.observeTemplates(ownerId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val exercises = exerciseRepository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -52,6 +58,10 @@ class TemplatesViewModel(
     val message = _message.asStateFlow()
     private val _preview = MutableStateFlow<TemplateImportPreview?>(null)
     val preview = _preview.asStateFlow()
+    val schedules = (plans?.observePlans(ownerId) ?: flowOf(emptyList<ActivityPlan>()))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _planPreview = MutableStateFlow<PlanBundlePreview?>(null)
+    val planPreview = _planPreview.asStateFlow()
     private var pendingExport: String? = null
     val sourceHandled: Boolean get() = savedState["templateSourceHandled"] ?: false
 
@@ -134,12 +144,29 @@ class TemplatesViewModel(
     }
 
     fun readImport(resolver: ContentResolver, uri: Uri) = operation {
-        _preview.value = withContext(Dispatchers.IO) {
-            resolver.openInputStream(uri)?.use(TemplateExchange::parse)
+        val text = withContext(Dispatchers.IO) {
+            resolver.openInputStream(uri)?.use(TemplateExchange::readText)
                 ?: error("Не удалось открыть файл")
         }
+        _preview.value = null
+        _planPreview.value = null
+        if (PlanBundleExchange.isBundle(text)) _planPreview.value = PlanBundleExchange.parse(text)
+        else _preview.value = TemplateExchange.parse(text)
     }
-    fun dismissPreview() { if (!_busy.value) _preview.value = null }
+    fun dismissPreview() { if (!_busy.value) { _preview.value = null; _planPreview.value = null } }
+    fun importPlanPreview() {
+        val captured = _planPreview.value ?: return
+        operation {
+            val added = requireNotNull(plans) { "Обновите приложение для импорта плана" }.importPlan(captured, ownerId)
+            _planPreview.value = null
+            _message.value = if (added) "План загружен. Цели и домашние упражнения — в «Активности за день»."
+                else "Этот план уже загружен. Повторных записей не создано."
+        }
+    }
+    fun deleteSchedule(id: Long) = operation {
+        plans?.deleteSchedule(id, ownerId)
+        _message.value = "Расписание удалено. Программы, цели и результаты сохранены."
+    }
     fun importPreview() {
         val captured = _preview.value ?: return
         operation {

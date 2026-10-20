@@ -64,6 +64,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.WorkoutTemplate
+import com.dtyan.fitdiary.data.repo.PlanBundleRepository
+import com.dtyan.fitdiary.export.PlanBundleExchange
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -104,7 +106,8 @@ private fun TemplateScreenContent(
     val context = LocalContext.current
     val container = context.appContainer
     val vm: TemplatesViewModel = viewModel(key = "templates_$ownerId") {
-        TemplatesViewModel(container.templateRepository, container.exerciseRepository, ownerId, createSavedStateHandle())
+        TemplatesViewModel(container.templateRepository, container.exerciseRepository, ownerId, createSavedStateHandle(),
+            PlanBundleRepository(container.database, container.templateRepository, container.activityRepository))
     }
     val templates by vm.templates.collectAsStateWithLifecycle()
     val exercises by vm.exercises.collectAsStateWithLifecycle()
@@ -113,6 +116,8 @@ private fun TemplateScreenContent(
     val error by vm.error.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
     val preview by vm.preview.collectAsStateWithLifecycle()
+    val planPreview by vm.planPreview.collectAsStateWithLifecycle()
+    val schedules by vm.schedules.collectAsStateWithLifecycle()
     val profiles by container.profiles.profiles.collectAsStateWithLifecycle(emptyList())
     val allProfiles by container.profiles.allProfiles.collectAsStateWithLifecycle(emptyList())
     val ownerName = allProfiles.firstOrNull { it.id == ownerId }?.name ?: "Участник"
@@ -121,6 +126,7 @@ private fun TemplateScreenContent(
     var catalogQuery by rememberSaveable { mutableStateOf("") }
     var discard by rememberSaveable { mutableStateOf(false) }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var deleteScheduleId by rememberSaveable { mutableStateOf<Long?>(null) }
     var startId by rememberSaveable { mutableStateOf<Long?>(null) }
     var participants by rememberSaveable { mutableStateOf<List<Long>>(listOf(ownerId)) }
     var sourceVisible by rememberSaveable(sourceWorkoutId) { mutableStateOf(sourceWorkoutId != null && !vm.sourceHandled) }
@@ -189,9 +195,18 @@ private fun TemplateScreenContent(
                         Button(onClick = vm::newTemplate, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Создать программу") }
                         OutlinedButton(onClick = { importPicker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
                             enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Импортировать JSON") }
-                        Text("Формат FitDiary. Сначала покажем содержимое файла, затем вы подтвердите импорт.",
+                        Text("Одна программа или целый план недели с активностью. Сначала покажем содержимое файла.",
                             style = MaterialTheme.typography.bodySmall)
                         StatusText(busy, error, message)
+                    }
+                }
+                items(schedules, key = { "schedule_${it.id}" }) { schedule ->
+                    val parsed = remember(schedule.documentJson) { runCatching { PlanBundleExchange.parse(schedule.documentJson) }.getOrNull() }
+                    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (parsed != null) PlanContents(parsed) else Text(schedule.name)
+                            TextButton(onClick = { deleteScheduleId = schedule.id }, enabled = !busy) { Text("Удалить расписание") }
+                        }
                     }
                 }
                 if (templates.isEmpty()) item("empty") { Text("Программ пока нет. Соберите свою из каталога или загрузите JSON-файл.") }
@@ -258,6 +273,26 @@ private fun TemplateScreenContent(
             }
         }, confirmButton = { TextButton(onClick = vm::importPreview, enabled = !busy) { Text(if (busy) "Импортируем…" else "Импортировать") } },
         dismissButton = { TextButton(onClick = vm::dismissPreview, enabled = !busy) { Text("Отмена") } }) }
+
+    planPreview?.let { imported -> AlertDialog(onDismissRequest = vm::dismissPreview,
+        title = { Text("Загрузить план недели?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Профиль: $ownerName", style = MaterialTheme.typography.titleMedium)
+                Text("Добавим программы и расписание. Цели и описания активности с теми же ключами обновятся. История результатов сохранится.")
+                PlanContents(imported, preview = true)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { TextButton(onClick = vm::importPlanPreview, enabled = !busy) { Text(if (busy) "Загружаем…" else "Загрузить план") } },
+        dismissButton = { TextButton(onClick = vm::dismissPreview, enabled = !busy) { Text("Отмена") } },
+    ) }
+    deleteScheduleId?.let { id -> AlertDialog(onDismissRequest = { if (!busy) deleteScheduleId = null },
+        title = { Text("Удалить расписание?") },
+        text = { Text("Программы тренировок, домашние упражнения, цели и результаты останутся.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { vm.deleteSchedule(id); deleteScheduleId = null }) { Text("Удалить") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = { deleteScheduleId = null }) { Text("Отмена") } },
+    ) }
 
     if (sourceVisible && sourceWorkoutId != null && !vm.sourceHandled) AlertDialog(
         onDismissRequest = { if (!busy) { sourceVisible = false; vm.dismissSource() } },

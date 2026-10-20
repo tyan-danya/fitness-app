@@ -48,6 +48,7 @@ import com.dtyan.fitdiary.ui.workout.ActiveWorkoutScreen
 import com.dtyan.fitdiary.ui.workout.ExerciseLogScreen
 import com.dtyan.fitdiary.ui.workout.ExercisePickerScreen
 import com.dtyan.fitdiary.ui.templates.TemplatesScreen
+import com.dtyan.fitdiary.ui.activity.ActivityScreen
 import com.dtyan.fitdiary.ui.update.UpdateBanner
 import com.dtyan.fitdiary.ui.update.UpdateDialog
 
@@ -57,6 +58,7 @@ object Routes {
     const val NUTRITION = "nutrition"
     const val MEASUREMENTS = "measurements"
     const val STATS = "stats"
+    const val ACTIVITY = "activity"
     const val ACTIVE_WORKOUT = "workout/{workoutId}"
     const val EXERCISE_PICKER = "workout/{workoutId}/pick"
     const val EXERCISE_LOG = "workout/{workoutId}/exercise/{exerciseId}"
@@ -175,6 +177,13 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onUpdate
                     onOpenWorkout = { id -> navController.navigate(Routes.activeWorkout(id)) },
                     onOpenWorkoutDetails = { id -> navController.navigate(Routes.workoutDetails(id)) },
                     onOpenTemplates = { navController.navigate(Routes.templates()) },
+                    onOpenActivity = { navController.navigate(Routes.ACTIVITY) },
+                )
+            }
+            composable(Routes.ACTIVITY) {
+                ActivityScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenPrograms = { navController.navigate(Routes.templates()) },
                 )
             }
             composable(Routes.NUTRITION) {

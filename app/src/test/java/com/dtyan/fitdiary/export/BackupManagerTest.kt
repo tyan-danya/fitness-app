@@ -8,6 +8,12 @@ import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.*
 import com.dtyan.fitdiary.data.repo.TemplateRepository
 import com.dtyan.fitdiary.data.repo.TemplatePlanItem
+import com.dtyan.fitdiary.data.repo.ActivityRepository
+import com.dtyan.fitdiary.data.repo.AndroidActivityClock
+import com.dtyan.fitdiary.data.repo.ActivityDefinitionInput
+import com.dtyan.fitdiary.data.repo.ActivityEntryInput
+import com.dtyan.fitdiary.data.repo.PlanBundleRepository
+import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
@@ -52,6 +58,21 @@ class BackupManagerTest {
         ))
     }
     @After fun tearDown() { db.close(); archive.delete(); photo.delete() }
+
+    /** Opt-in local compatibility check; never package a personal archive as a test fixture. */
+    @Test fun validatesLocallyProvidedBackupWhenConfigured() = runTest {
+        val path = System.getenv("FITDIARY_BACKUP_CHECK_FILE") ?: return@runTest
+        seed()
+        val preview = File(path).inputStream().use { manager.inspectArchive(it) }
+        assertThat(preview.profiles).isGreaterThan(0)
+        manager.restoreBackup(preview)
+        manager.writeArchive(archive)
+        val roundTrip = archive.inputStream().use { manager.inspectArchive(it) }
+        assertThat(roundTrip.profiles).isEqualTo(preview.profiles)
+        assertThat(roundTrip.workouts).isEqualTo(preview.workouts)
+        assertThat(roundTrip.measurements).isEqualTo(preview.measurements)
+        manager.discard(roundTrip)
+    }
 
     private suspend fun seed() {
         db.athleteDao().insert(Athlete(1, "Me"))
@@ -175,6 +196,7 @@ class BackupManagerTest {
         val content = entries(archive).toMutableMap()
         val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
         val tables = document["tables"]!!.jsonObject.toMutableMap().apply {
+            keys.filter { it.startsWith("activity_") }.forEach { remove(it) }
             remove("workout_templates"); remove("template_exercises")
             put("workout_exercises", JsonArray(getValue("workout_exercises").jsonArray.map { row ->
                 JsonObject(row.jsonObject.filterKeys { it in setOf("workoutId", "exerciseId", "position") })
@@ -198,6 +220,63 @@ class BackupManagerTest {
         db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM workout_templates").use {
             it.moveToFirst(); assertThat(it.getInt(0)).isEqualTo(0)
         }
+    }
+
+    @Test fun activityBackupPreservesGoalsScheduleHistoryAndExcludesUnrecordedStopwatch() = runTest {
+        seed()
+        val activity = ActivityRepository(db, clock = AndroidActivityClock(context))
+        val bundles = PlanBundleRepository(db, TemplateRepository(db), activity)
+        bundles.importPlan(PlanBundleExchange.parse(examplePlan().toString()), 2)
+        val plank = activity.getAllDefinitions(2).first { it.key == "plank" }
+        activity.saveEntry(plank.id, ActivityEntryInput(20000, durationSeconds = 18, clientToken = "recorded"), 2)
+        activity.startTimer(plank.id, 2)
+        manager.writeArchive(archive)
+        val document = Json.parseToJsonElement(entries(archive).getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        assertThat(document["tables"]!!.jsonObject["activity_timers"]!!.jsonArray).isEmpty()
+        activity.updateGoals(plank.id, listOf(100.0), 2)
+        val preview = manager.inspectArchive(archive.inputStream())
+        assertThat(preview.activities).isEqualTo(1)
+        manager.restoreBackup(preview)
+        assertThat(activity.getDefinition(plank.id, 2)!!.goals).containsExactly(10.0, 15.0, 20.0).inOrder()
+        assertThat(activity.getAllEntries(2).single().durationSeconds).isEqualTo(18L)
+        assertThat(activity.getAllEntries(1)).isEmpty()
+        assertThat(db.activityDao().getTimer(plank.id, 2)).isNull()
+        assertThat(db.activityDao().getPlanByKey("example-week", 2)).isNotNull()
+    }
+
+    @Test fun activityBackupRejectsForeignOwnerAndWrongMetricBeforeReplacement() = runTest {
+        seed()
+        val activity = ActivityRepository(db, clock = AndroidActivityClock(context))
+        val plank = activity.upsertDefinition(ActivityDefinitionInput("plank", "Plank", ActivityKind.DURATION), 2)
+        activity.saveEntry(plank, ActivityEntryInput(20000, durationSeconds = 18, clientToken = "recorded"), 2)
+        manager.writeArchive(archive)
+        val content = entries(archive)
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        for (change in listOf("athleteId" to JsonPrimitive(1), "reps" to JsonPrimitive(5))) {
+            val tables = document["tables"]!!.jsonObject.toMutableMap()
+            tables["activity_entries"] = JsonArray(tables.getValue("activity_entries").jsonArray.map {
+                JsonObject(it.jsonObject + change)
+            })
+            val altered = JsonObject(document + ("tables" to JsonObject(tables)))
+            val bad = content + ("diary.json" to altered.toString().toByteArray())
+            assertThat(runCatching { manager.inspectArchive(ByteArrayInputStream(zip(bad))) }.isFailure).isTrue()
+        }
+        assertThat(activity.getAllEntries(2).single().durationSeconds).isEqualTo(18L)
+    }
+
+    @Test fun version16BackupUpgradesAndRetainsPrograms() = runTest {
+        seed()
+        TemplateRepository(db).create("Saved program", listOf(TemplatePlanItem(1)), 2)
+        manager.writeArchive(archive)
+        val content = entries(archive)
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        val old = JsonObject(document + mapOf("schemaVersion" to JsonPrimitive(6),
+            "tables" to JsonObject(document["tables"]!!.jsonObject.filterKeys { !it.startsWith("activity_") })))
+        val preview = manager.inspectArchive(ByteArrayInputStream(zip(content + ("diary.json" to old.toString().toByteArray()))))
+        manager.restoreBackup(preview)
+        assertThat(preview.templates).isEqualTo(1)
+        assertThat(preview.activities).isEqualTo(0)
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
     }
 
     @Test fun completedExerciseWithoutMatchingActualSetsIsRejectedBeforeRestore() = runTest {

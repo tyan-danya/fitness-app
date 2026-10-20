@@ -85,6 +85,7 @@ fun HomeScreen(
     onOpenWorkout: (Long) -> Unit,
     onOpenWorkoutDetails: (Long) -> Unit,
     onOpenTemplates: (() -> Unit)? = null,
+    onOpenActivity: (() -> Unit)? = null,
 ) {
     val container = LocalContext.current.appContainer
     val vm: HomeViewModel = viewModel {
@@ -124,6 +125,19 @@ fun HomeScreen(
                 StartWorkoutHeroCard(onStart = { if (!starting) vm.startWorkout(onOpenWorkout) })
             } else {
                 ActiveWorkoutHeroCard(workout = current, onContinue = { onOpenWorkout(current.id) })
+            }
+        }
+
+        if (onOpenActivity != null) item(key = "daily_activity") {
+            Surface(shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Активность за день", style = MaterialTheme.typography.titleLarge)
+                    Text("Ходьба, домашние подходы и планка — в любое время дня.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Button(onClick = onOpenActivity, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                        Text("Записать активность")
+                    }
+                }
             }
         }
 

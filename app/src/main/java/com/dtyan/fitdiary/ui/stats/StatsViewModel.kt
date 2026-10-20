@@ -13,6 +13,7 @@ import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.data.repo.ActivityRepository
 import com.dtyan.fitdiary.export.ExportManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CancellationException
@@ -70,6 +71,7 @@ class StatsViewModel(
     private val statsRepository: StatsRepository,
     exerciseRepository: ExerciseRepository,
     measurementRepository: MeasurementRepository? = null,
+    activityRepository: ActivityRepository? = null,
 ) : ViewModel() {
 
     private val exportManager = ExportManager(
@@ -78,6 +80,7 @@ class StatsViewModel(
         nutritionRepository = nutritionRepository,
         statsRepository = statsRepository,
         measurementRepository = measurementRepository,
+        activityRepository = activityRepository,
     )
 
     private val zone: ZoneId = ZoneId.systemDefault()

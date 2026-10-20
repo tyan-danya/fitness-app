@@ -202,7 +202,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
         try {
@@ -312,7 +312,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
         try {
@@ -362,7 +362,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries()
             .build()
         try {
@@ -394,7 +394,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries().build()
         try {
             assertThat(db.athleteDao().getById(1)!!.name).isEqualTo("Я")
@@ -425,7 +425,7 @@ class MigrationTest {
         old.version = 3
         openHelpers.removeAt(openHelpers.lastIndex).close()
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6)
+            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
             .allowMainThreadQueries().build()
         try {
             assertThat(db.athleteDao().getActiveOnce().single().id).isEqualTo(1L)
@@ -451,7 +451,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_5_6).allowMainThreadQueries().build()
+            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).allowMainThreadQueries().build()
         try {
             // Opening via Room also checks every column, index and foreign key in schema 6.
             val plan = db.workoutDao().observePlan(2).first()
@@ -475,6 +475,49 @@ class MigrationTest {
             assertThat(db.templateDao().getItems(templateId).single().targetSets).isEqualTo(3)
             assertThat(db.templateDao().observeTemplates(1).first()).isEmpty()
             assertThat(db.templateDao().observeTemplates(2).first().single().name).isEqualTo("Личный план")
+        } finally { db.close() }
+    }
+
+    @Test
+    fun roomOpens_v6File_preservesWorkoutProgramsAndAddsEmptyPersonalActivityTables() = runTest {
+        val old = createV1DatabaseWithData()
+        AppDatabase.MIGRATION_1_2.migrate(old)
+        AppDatabase.MIGRATION_2_3.migrate(old)
+        AppDatabase.MIGRATION_3_4.migrate(old)
+        AppDatabase.MIGRATION_4_5.migrate(old)
+        AppDatabase.MIGRATION_5_6.migrate(old)
+        old.execSQL("INSERT INTO athletes(id, name, isArchived) VALUES(2, 'Друг', 0)")
+        old.execSQL("INSERT INTO workout_templates(id, athleteId, name) VALUES(1, 2, 'Сохранённый план')")
+        old.execSQL("INSERT INTO template_exercises(templateId, exerciseId, position, targetSets, targetReps, note) VALUES(1, 1, 1, 4, 8, 'Подсказка')")
+        old.execSQL("UPDATE workout_exercises SET targetSets=4, targetReps=8, completedAt=3000, note='Записанная цель' WHERE workoutId=1")
+        old.version = 6
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_6_7).allowMainThreadQueries().build()
+        try {
+            // Real Room validates schema 7, including composite foreign keys and uniqueness.
+            assertThat(db.templateDao().getById(1, 2)!!.name).isEqualTo("Сохранённый план")
+            assertThat(db.templateDao().getItems(1).single().targetSets).isEqualTo(4)
+            assertThat(db.workoutDao().getPlanOnce(1).single().completedAt).isEqualTo(3000L)
+            assertThat(db.workoutDao().getPlanOnce(1).single().note).isEqualTo("Записанная цель")
+            assertThat(db.workoutSetDao().getForWorkoutOnce(1).single().weightKg).isEqualTo(100.0)
+            assertThat(db.mealDao().getForDayOnce(20000).single().name).isEqualTo("Курица")
+            assertThat(db.activityDao().getAllDefinitions(1)).isEmpty()
+            assertThat(db.activityDao().getAllEntries(1)).isEmpty()
+            assertThat(db.activityDao().observeTimers(1).first()).isEmpty()
+            assertThat(db.activityDao().observePlans(1).first()).isEmpty()
+            val definitionId = db.activityDao().insertDefinition(ActivityDefinition(
+                athleteId = 2, key = "synthetic", name = "Активность",
+                kind = com.dtyan.fitdiary.domain.ActivityKind.REPS,
+                goalMetric = com.dtyan.fitdiary.domain.ActivityMetric.REPS,
+                goalsJson = "[4,8]",
+            ))
+            db.activityDao().insertEntry(ActivityEntry(athleteId = 2, activityId = definitionId,
+                epochDay = 20_000, timestamp = 6000, reps = 4, clientToken = "migration-entry"))
+            assertThat(db.activityDao().getAllEntries(2).single().reps).isEqualTo(4)
+            assertThat(db.activityDao().getAllEntries(1)).isEmpty()
+            assertThat(db.workoutDao().getAllFinishedOnce(1)).hasSize(1)
+            assertThat(db.workoutDao().getAllFinishedOnce(2)).isEmpty()
         } finally { db.close() }
     }
 }

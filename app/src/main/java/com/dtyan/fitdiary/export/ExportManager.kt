@@ -9,6 +9,7 @@ import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.data.repo.ActivityRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -32,6 +33,21 @@ private data class ExportRoot(
     val workouts: List<ExportWorkout>,
     val meals: List<ExportMeal>,
     val measurements: List<ExportMeasurement> = emptyList(),
+    val activityDefinitions: List<ExportActivityDefinition> = emptyList(),
+    val activityEntries: List<ExportActivityEntry> = emptyList(),
+)
+
+@Serializable
+private data class ExportActivityDefinition(
+    val key: String, val name: String, val kind: String, val goalMetric: String, val goals: List<Double>,
+    val instructions: String, val weeklyScheduleNote: String?, val archived: Boolean,
+)
+
+@Serializable
+private data class ExportActivityEntry(
+    val activityKey: String, val activity: String, val date: String, val recordedAt: String,
+    val reps: Int?, val durationSeconds: Long?, val distanceKm: Double?, val steps: Long?,
+    val speedKmh: Double?, val inclinePercent: Double?, val note: String?, val isClean: Boolean,
 )
 
 @Serializable
@@ -100,6 +116,7 @@ class ExportManager(
     private val nutritionRepository: NutritionRepository,
     private val statsRepository: StatsRepository,
     private val measurementRepository: MeasurementRepository? = null,
+    private val activityRepository: ActivityRepository? = null,
 ) {
 
     private val json = Json {
@@ -166,6 +183,8 @@ class ExportManager(
                 needsEstimate = meal.needsEstimate,
             )
         }
+        val definitions = activityRepository?.getAllDefinitions(athleteId).orEmpty()
+        val byId = definitions.associateBy { it.id }
         val root = ExportRoot(
             exportedAt = iso(now),
             athleteId = athleteId,
@@ -183,6 +202,16 @@ class ExportManager(
                     valueCm = m.valueCm,
                     note = m.note,
                 )
+            },
+            activityDefinitions = definitions.map {
+                ExportActivityDefinition(it.key, it.name, it.kind.name, it.goalMetric.name, it.goals,
+                    it.instructions, it.weeklyScheduleNote, it.isArchived)
+            },
+            activityEntries = activityRepository?.getAllEntries(athleteId).orEmpty().map { entry ->
+                val definition = requireNotNull(byId[entry.activityId]) { "Описание активности не найдено" }
+                ExportActivityEntry(definition.key, definition.name, LocalDate.ofEpochDay(entry.epochDay).toString(),
+                    iso(entry.timestamp), entry.reps, entry.durationSeconds, entry.distanceKm, entry.steps,
+                    entry.speedKmh, entry.inclinePercent, entry.note, entry.isClean)
             },
         )
         return json.encodeToString(root)
@@ -291,6 +320,22 @@ class ExportManager(
         return sb.toString()
     }
 
+    suspend fun buildActivityCsv(athleteId: Long = nutritionRepository.currentAthleteId): String {
+        val definitions = activityRepository?.getAllDefinitions(athleteId).orEmpty().associateBy { it.id }
+        return buildString {
+            appendLine(row("date", "recorded_at", "activity_key", "activity", "kind", "reps", "duration_seconds",
+                "distance_km", "steps", "speed_kmh", "incline_percent", "clean_technique", "note"))
+            for (entry in activityRepository?.getAllEntries(athleteId).orEmpty()) {
+                val definition = requireNotNull(definitions[entry.activityId]) { "Описание активности не найдено" }
+                appendLine(row(LocalDate.ofEpochDay(entry.epochDay).toString(), iso(entry.timestamp),
+                    definition.key, definition.name, definition.kind.name, entry.reps?.toString().orEmpty(),
+                    entry.durationSeconds?.toString().orEmpty(), entry.distanceKm?.let(::csvNum).orEmpty(),
+                    entry.steps?.toString().orEmpty(), entry.speedKmh?.let(::csvNum).orEmpty(),
+                    entry.inclinePercent?.let(::csvNum).orEmpty(), if (entry.isClean) "1" else "0", entry.note.orEmpty()))
+            }
+        }
+    }
+
     // ---------- Файлы и share-интенты ----------
 
     private fun exportsDir(): File = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -326,6 +371,7 @@ class ExportManager(
             "fitdiary-meals-$stamp.csv" to buildMealsCsv(athleteId),
             "fitdiary-weights-$stamp.csv" to buildWeightsCsv(athleteId),
             "fitdiary-measurements-$stamp.csv" to buildMeasurementsCsv(athleteId),
+            "fitdiary-activity-$stamp.csv" to buildActivityCsv(athleteId),
         ).map { (name, content) ->
             File(exportsDir(), name).apply { writeText(bom + content, Charsets.UTF_8) }
         }

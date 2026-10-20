@@ -104,6 +104,7 @@ fun StatsScreen(
             statsRepository = container.statsRepository,
             exerciseRepository = container.exerciseRepository,
             measurementRepository = container.measurementRepository,
+            activityRepository = container.activityRepository,
         )
     }
 

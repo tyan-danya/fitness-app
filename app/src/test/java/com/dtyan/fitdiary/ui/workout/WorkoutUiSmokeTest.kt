@@ -168,6 +168,10 @@ class WorkoutUiSmokeTest {
         capture("guided-workout-320dp-font130")
         compose.onNodeWithText("Открыть следующее: Жим лёжа").performScrollTo().performClick()
         waitForText("Подход для: Даня")
+        // Participant identity is rendered before Room emits the exercise plan. Wait for
+        // that independent query before scrolling to the conditionally inserted action.
+        waitForText("План: упражнение 1 из 2")
+        compose.onNodeWithText("Подходы: 3 · Повторы: 8").assertExists()
         compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено → следующее"))
         compose.onNodeWithText("Упражнение выполнено → следующее").assertIsNotEnabled()
         compose.onNode(hasSetTextAction() and hasText("Вес, кг")).performScrollTo().performTextReplacement("41")

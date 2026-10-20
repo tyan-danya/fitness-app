@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class, WorkoutTemplate::class, TemplateExercise::class],
-    version = 6,
+    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class, WorkoutTemplate::class, TemplateExercise::class, ActivityDefinition::class, ActivityEntry::class, ActivityTimer::class, ActivityPlan::class],
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -21,6 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun weightDao(): WeightDao
     abstract fun measurementDao(): MeasurementDao
     abstract fun templateDao(): TemplateDao
+    abstract fun activityDao(): ActivityDao
 
     companion object {
         /** v2: у упражнений появились вид оборудования и фото тренажёра. */
@@ -137,6 +138,42 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v7: отдельный личный дневник активности, целей и незавершённых таймеров. */
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE activity_definitions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, athleteId INTEGER NOT NULL,
+                    `key` TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL, goalMetric TEXT NOT NULL,
+                    goalsJson TEXT NOT NULL, instructions TEXT NOT NULL, weeklyScheduleNote TEXT,
+                    sortOrder INTEGER NOT NULL DEFAULT 0, isArchived INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY(athleteId) REFERENCES athletes(id) ON UPDATE NO ACTION ON DELETE NO ACTION)""")
+                db.execSQL("CREATE UNIQUE INDEX index_activity_definitions_athleteId_key ON activity_definitions(athleteId, `key`)")
+                db.execSQL("CREATE UNIQUE INDEX index_activity_definitions_id_athleteId ON activity_definitions(id, athleteId)")
+                db.execSQL("""CREATE TABLE activity_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, athleteId INTEGER NOT NULL, activityId INTEGER NOT NULL,
+                    epochDay INTEGER NOT NULL, timestamp INTEGER NOT NULL, reps INTEGER, durationSeconds INTEGER,
+                    distanceKm REAL, steps INTEGER, speedKmh REAL, inclinePercent REAL, note TEXT,
+                    isClean INTEGER NOT NULL DEFAULT 1, clientToken TEXT NOT NULL,
+                    FOREIGN KEY(activityId, athleteId) REFERENCES activity_definitions(id, athleteId) ON UPDATE NO ACTION ON DELETE CASCADE)""")
+                db.execSQL("CREATE INDEX index_activity_entries_activityId_athleteId ON activity_entries(activityId, athleteId)")
+                db.execSQL("CREATE INDEX index_activity_entries_athleteId_epochDay ON activity_entries(athleteId, epochDay)")
+                db.execSQL("CREATE UNIQUE INDEX index_activity_entries_clientToken ON activity_entries(clientToken)")
+                db.execSQL("""CREATE TABLE activity_timers (
+                    activityId INTEGER NOT NULL PRIMARY KEY, athleteId INTEGER NOT NULL,
+                    startElapsedRealtime INTEGER NOT NULL, startWallTime INTEGER NOT NULL, bootCount INTEGER,
+                    durationSeconds INTEGER, clientToken TEXT NOT NULL, clockIdentity TEXT NOT NULL,
+                    FOREIGN KEY(activityId, athleteId) REFERENCES activity_definitions(id, athleteId) ON UPDATE NO ACTION ON DELETE CASCADE)""")
+                db.execSQL("CREATE INDEX index_activity_timers_activityId_athleteId ON activity_timers(activityId, athleteId)")
+                db.execSQL("CREATE INDEX index_activity_timers_athleteId ON activity_timers(athleteId)")
+                db.execSQL("CREATE UNIQUE INDEX index_activity_timers_clientToken ON activity_timers(clientToken)")
+                db.execSQL("""CREATE TABLE activity_plans (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, athleteId INTEGER NOT NULL,
+                    planKey TEXT NOT NULL, name TEXT NOT NULL, documentJson TEXT NOT NULL,
+                    FOREIGN KEY(athleteId) REFERENCES athletes(id) ON UPDATE NO ACTION ON DELETE NO ACTION)""")
+                db.execSQL("CREATE UNIQUE INDEX index_activity_plans_athleteId_planKey ON activity_plans(athleteId, planKey)")
+            }
+        }
+
         /** Колбэк с предзаполнением каталога упражнений. */
         fun seedCallback(): Callback = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -148,7 +185,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "fitdiary.db")
                 .addCallback(seedCallback())
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
     }
 }

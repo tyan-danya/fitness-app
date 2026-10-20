@@ -10,6 +10,12 @@ import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.data.repo.ActivityRepository
+import com.dtyan.fitdiary.data.repo.AndroidActivityClock
+import com.dtyan.fitdiary.data.repo.ActivityDefinitionInput
+import com.dtyan.fitdiary.data.repo.ActivityEntryInput
+import com.dtyan.fitdiary.data.db.Athlete
+import com.dtyan.fitdiary.domain.ActivityKind
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -45,6 +51,7 @@ class ExportManagerTest {
     private lateinit var statsRepo: StatsRepository
     private lateinit var measurementRepo: MeasurementRepository
     private lateinit var manager: ExportManager
+    private lateinit var activityRepo: ActivityRepository
 
     /** Фиксированное время: 2026-08-01T10:00 Europe/Moscow. */
     private val t0: Long = ZonedDateTime
@@ -71,7 +78,8 @@ class ExportManagerTest {
         nutritionRepo = NutritionRepository(db.mealDao())
         statsRepo = StatsRepository(db.workoutDao(), db.workoutSetDao(), db.weightDao())
         measurementRepo = MeasurementRepository(db.measurementDao())
-        manager = ExportManager(context, workoutRepo, nutritionRepo, statsRepo, measurementRepo)
+        activityRepo = ActivityRepository(db, clock = AndroidActivityClock(context))
+        manager = ExportManager(context, workoutRepo, nutritionRepo, statsRepo, measurementRepo, activityRepo)
     }
 
     @After
@@ -253,6 +261,25 @@ class ExportManagerTest {
     }
 
     // ---------- Замеры ----------
+
+    @Test fun exportsDailyActivityWithExplicitUnitsAndOwnerIncludingArchivedDescriptions() = runTest {
+        db.athleteDao().insert(Athlete(1, "A")); db.athleteDao().insert(Athlete(2, "B"))
+        val walking = activityRepo.upsertDefinition(ActivityDefinitionInput("walk", "Walk", ActivityKind.WALK,
+            goals = listOf(1200.0, 1800.0)), 2)
+        activityRepo.saveEntry(walking, ActivityEntryInput(20000, durationSeconds = 1500, distanceKm = 2.0,
+            steps = 2800, speedKmh = 4.8, inclinePercent = 0.0, note = "note;with delimiter", clientToken = "walking"), 2)
+        activityRepo.archiveDefinition(walking, 2)
+        val root = Json.parseToJsonElement(manager.buildJsonString(athleteId = 2)).jsonObject
+        assertThat(root["workouts"]!!.jsonArray).isEmpty()
+        val row = root["activityEntries"]!!.jsonArray.single().jsonObject
+        assertThat(row["durationSeconds"]!!.jsonPrimitive.long).isEqualTo(1500L)
+        assertThat(row["steps"]!!.jsonPrimitive.long).isEqualTo(2800L)
+        assertThat(row["distanceKm"]!!.jsonPrimitive.double).isEqualTo(2.0)
+        assertThat(root["activityDefinitions"]!!.jsonArray.single().jsonObject["archived"]!!.jsonPrimitive.boolean).isTrue()
+        assertThat(Json.parseToJsonElement(manager.buildJsonString(athleteId = 1)).jsonObject["activityEntries"]!!.jsonArray).isEmpty()
+        assertThat(manager.buildActivityCsv(2)).contains("1500;2;2800;4,8;0;1;\"note;with delimiter\"")
+        assertThat(manager.buildActivityCsv(1).trim().lines()).hasSize(1)
+    }
 
     @Test
     fun measurements_inJsonAndCsv() = runTest {
