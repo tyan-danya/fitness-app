@@ -2,6 +2,7 @@ package com.dtyan.fitdiary.ui.activity
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.dtyan.fitdiary.data.db.ActivityDefinition
 import com.dtyan.fitdiary.data.db.ActivityTimer
 import com.dtyan.fitdiary.domain.ActivityProgress
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.Format
 import java.time.LocalDate
 import kotlinx.coroutines.delay
@@ -73,7 +77,11 @@ internal fun ActivityStopwatchPanel(definition: ActivityDefinition, timer: Activ
     LazyColumn(modifier.fillMaxSize().testTag("activity-stopwatch"), contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item("title") {
-            Text(definition.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(definition.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f))
+                ExerciseGuideThumb(ExerciseGuides.forActivity(definition), size = 48.dp, displayName = definition.name)
+            }
             Text("Результат для: $ownerName", style = MaterialTheme.typography.titleMedium)
             Text("Дата начала: ${Format.dateFull(LocalDate.ofEpochDay(day))}")
         }

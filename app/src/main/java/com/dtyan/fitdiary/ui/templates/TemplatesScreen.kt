@@ -66,6 +66,8 @@ import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.WorkoutTemplate
 import com.dtyan.fitdiary.data.repo.PlanBundleRepository
 import com.dtyan.fitdiary.export.PlanBundleExchange
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import kotlinx.coroutines.CancellationException
 
 @Composable
@@ -177,7 +179,7 @@ private fun TemplateScreenContent(
                 { catalogQuery = it }, { vm.addExercise(it) }, Modifier.padding(padding),
             )
             currentDraft != null -> TemplateEditor(
-                currentDraft, busy, error, message, ownerName, vm,
+                currentDraft, busy, error, message, ownerName, vm, exercises,
                 onAdd = { catalogQuery = ""; choosingExercises = true }, modifier = Modifier.padding(padding),
             )
             else -> LazyColumn(
@@ -264,8 +266,13 @@ private fun TemplateScreenContent(
                 Text(imported.name, style = MaterialTheme.typography.titleMedium)
                 Text("${imported.exercises.size} упражнений. Будет создана новая программа для: $ownerName.")
                 imported.exercises.forEachIndexed { index, item -> Column {
-                    Text("${index + 1}. ${item.name}", style = MaterialTheme.typography.titleSmall)
-                    Text("${item.muscleGroup} · ${item.equipment}", style = MaterialTheme.typography.bodySmall)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ExerciseGuideThumb(ExerciseGuides.resolve(item.name, item.equipment), displayName = item.name)
+                        Column(Modifier.weight(1f)) {
+                            Text("${index + 1}. ${item.name}", style = MaterialTheme.typography.titleSmall)
+                            Text("${item.muscleGroup} · ${item.equipment}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     Text(targets(item.targetSets, item.targetReps), style = MaterialTheme.typography.bodySmall)
                     item.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 } }
@@ -332,7 +339,7 @@ private fun TemplateCard(template: WorkoutTemplate, busy: Boolean, onStart: () -
 
 @Composable
 private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, message: String?, ownerName: String, vm: TemplatesViewModel,
-    onAdd: () -> Unit, modifier: Modifier = Modifier) {
+    exercises: List<Exercise>, onAdd: () -> Unit, modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("name") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -347,8 +354,15 @@ private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, 
         itemsIndexed(draft.rows, key = { _, row -> row.exerciseId }) { index, row ->
             Surface(shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${index + 1}. ${row.name}", style = MaterialTheme.typography.titleMedium)
-                    Text(row.muscleGroup, style = MaterialTheme.typography.bodySmall)
+                    val exercise = exercises.firstOrNull { it.id == row.exerciseId }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ExerciseGuideThumb(exercise?.let(ExerciseGuides::forExercise) ?: ExerciseGuides.resolve(row.name),
+                            exercise?.photoPath, displayName = row.name)
+                        Column(Modifier.weight(1f)) {
+                            Text("${index + 1}. ${row.name}", style = MaterialTheme.typography.titleMedium)
+                            Text(row.muscleGroup, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         IconButton(onClick = { vm.moveExercise(row.exerciseId, -1) }, enabled = !busy && index > 0) {
                             Icon(Icons.Filled.ArrowUpward, "Выше: ${row.name}")
@@ -392,8 +406,13 @@ private fun TemplateCatalog(exercises: List<Exercise>, selected: Set<Long>, quer
                 val included = exercise.id in selected
                 Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 1.dp) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text(exercise.name, style = MaterialTheme.typography.titleMedium)
-                        Text("${exercise.muscleGroup} · ${exercise.equipment}", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ExerciseGuideThumb(ExerciseGuides.forExercise(exercise), exercise.photoPath, displayName = exercise.name)
+                            Column(Modifier.weight(1f)) {
+                                Text(exercise.name, style = MaterialTheme.typography.titleMedium)
+                                Text("${exercise.muscleGroup} · ${exercise.equipment}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                         TextButton(onClick = { onAdd(exercise) }, enabled = !included && selected.size < 100) {
                             Text(if (included) "✓ Добавлено" else "Добавить")
                         }

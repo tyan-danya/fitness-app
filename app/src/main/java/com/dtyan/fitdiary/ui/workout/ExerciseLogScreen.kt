@@ -89,6 +89,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.db.Workout
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
+import com.dtyan.fitdiary.ui.common.ExerciseGuideButton
 import com.dtyan.fitdiary.ui.common.ConfettiBurst
 import com.dtyan.fitdiary.ui.common.EmptyState
 import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
@@ -293,6 +296,7 @@ private fun AthleteExerciseLogScreen(
                 }
                 item(key = "photo") {
                     ExercisePhotoBlock(
+                        exerciseName = ui.exerciseName,
                         photoPath = ui.photoPath,
                         equipment = ui.equipment,
                         onOpenPhoto = { showPhotoViewer = true },
@@ -439,11 +443,12 @@ private fun AthleteExerciseLogScreen(
 
 /**
  * Компактный блок «фото тренажёра + вид оборудования» между шапкой и вводом.
- * С фото: миниатюра (тап — просмотр), пилюля оборудования и кнопка замены.
- * Без фото: кнопка «Добавить фото тренажёра» и пилюля оборудования.
+ * Своё фото открывается как раньше; без него показана встроенная схема.
+ * Справка и меню фото доступны независимо от того, добавил ли человек фотографию.
  */
 @Composable
 private fun ExercisePhotoBlock(
+    exerciseName: String,
     photoPath: String?,
     equipment: String,
     onOpenPhoto: () -> Unit,
@@ -453,6 +458,7 @@ private fun ExercisePhotoBlock(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
+    val guide = ExerciseGuides.resolve(exerciseName, equipment)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -471,46 +477,21 @@ private fun ExercisePhotoBlock(
                     )
                 },
             )
-            if (equipment.isNotBlank()) {
-                EquipmentPill(equipment)
-            }
-            Spacer(Modifier.weight(1f))
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Filled.PhotoCamera, contentDescription = "Заменить фото")
-                }
-                PhotoSourceMenu(
-                    expanded = menuOpen,
-                    hasPhoto = true,
-                    onDismiss = { menuOpen = false },
-                    onCamera = onCamera,
-                    onGallery = onGallery,
-                    onDelete = onDelete,
-                )
-            }
         } else {
-            Box {
-                OutlinedButton(onClick = { menuOpen = true }) {
-                    Icon(
-                        imageVector = Icons.Filled.PhotoCamera,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Добавить фото тренажёра")
-                }
-                PhotoSourceMenu(
-                    expanded = menuOpen,
-                    hasPhoto = false,
-                    onDismiss = { menuOpen = false },
-                    onCamera = onCamera,
-                    onGallery = onGallery,
-                    onDelete = onDelete,
-                )
+            ExerciseGuideThumb(guide, size = 64.dp, displayName = exerciseName)
+        }
+        Column(Modifier.weight(1f)) {
+            if (equipment.isNotBlank()) EquipmentPill(equipment)
+            ExerciseGuideButton(guide, photoPath, displayName = exerciseName)
+        }
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Filled.PhotoCamera, contentDescription = if (photoPath == null) "Добавить фото тренажёра" else "Заменить фото")
             }
-            if (equipment.isNotBlank()) {
-                EquipmentPill(equipment)
-            }
+            PhotoSourceMenu(
+                expanded = menuOpen, hasPhoto = photoPath != null,
+                onDismiss = { menuOpen = false }, onCamera = onCamera, onGallery = onGallery, onDelete = onDelete,
+            )
         }
     }
 }

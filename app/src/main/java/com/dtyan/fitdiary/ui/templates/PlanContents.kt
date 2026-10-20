@@ -2,6 +2,7 @@ package com.dtyan.fitdiary.ui.templates
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -11,9 +12,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.export.PlanBundlePreview
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import java.time.LocalDate
 
 @Composable
@@ -49,13 +53,19 @@ internal fun PlanContents(plan: PlanBundlePreview, preview: Boolean = false) {
                 plan.templates.forEach { template ->
                     Text(template.name, style = MaterialTheme.typography.titleMedium)
                     template.exercises.forEach { exercise ->
-                        Text("${exercise.name}: ${exercise.targetSets} подхода" +
-                            (exercise.targetReps?.let { " · $it повторов" } ?: ""))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ExerciseGuideThumb(ExerciseGuides.resolve(exercise.name, exercise.equipment), displayName = exercise.name)
+                            Text("${exercise.name}: ${exercise.targetSets} подхода" +
+                                (exercise.targetReps?.let { " · $it повторов" } ?: ""), modifier = Modifier.weight(1f))
+                        }
                         exercise.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     }
                 }
                 plan.activities.forEach { activity ->
-                    Text(activity.name, style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ExerciseGuideThumb(ExerciseGuides.forActivity(activity.key, activity.name), displayName = activity.name)
+                        Text(activity.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    }
                     val units = when (activity.goalMetric) {
                         "DURATION_SECONDS" -> "сек"; "DISTANCE_KM" -> "км"; "STEPS" -> "шагов"; else -> "повторов"
                     }

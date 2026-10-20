@@ -1,0 +1,1315 @@
+{
+  "format": "fitdiary-exercise-artwork/1",
+  "sourceRepository": "https://github.com/bryllim/workout-guide",
+  "sourceCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+  "sourceLicense": "https://creativecommons.org/licenses/by-sa/4.0/",
+  "review": "Every sourced frame listed here was visually inspected against its mapped movement. Related variants are disclosed in captions. Original PNGs are bundled offline and are not fetched by the app.",
+  "excludedSourceSlugs": {
+    "lat-pulldown": "Behind-the-neck pulldown does not match the guide's front pulldown.",
+    "assisted-dip": "Shows a seated dip press machine, not a counterweight-assisted parallel-bar dip.",
+    "reverse-pec-deck": "Shows a forward-facing chest fly, not reverse fly facing the chest support.",
+    "dead-bug": "Head/limb depiction was not suitable for the intended instruction.",
+    "crunch": "Feet are elevated on a bench, unlike the guide's feet-on-floor variant.",
+    "bench-dip": "Shows an advanced feet-elevated variant, unlike the guide's bent-knee feet-on-floor variant.",
+    "lying-leg-curl": "Small schematic roller and frame are hard to distinguish; replaced by a clearer side-view illustration."
+  },
+  "artworks": [
+    {
+      "key": "barbell_bench_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "bench-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/bench-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_barbell_bench_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_barbell_bench_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/bench-press/frame-1.png",
+          "sha256": "d15ef9b2bb07e8fe91f90f53e9fde947d016f11aca05ab681be55df734681c05",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0042-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_barbell_bench_press_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_barbell_bench_press_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/bench-press/frame-2.png",
+          "sha256": "19bcf1f9d40dffb8801a73188b07d9821e5e910574a0337130157cad2a463acf",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "dumbbell_bench_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "dumbbell-bench-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/dumbbell-bench-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_dumbbell_bench_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dumbbell_bench_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/dumbbell-bench-press/frame-1.png",
+          "sha256": "04d864267fc78d6c65ed09a9691345b55e995154e462113fa982d9dc31f2e575",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0055-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_dumbbell_bench_press_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dumbbell_bench_press_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/dumbbell-bench-press/frame-2.png",
+          "sha256": "2bbe648e925653e4753c5cd9edff09e686ccb767cb3e286dff8800d8f5981699",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "machine_chest_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "machine-chest-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/machine-chest-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример рычажного тренажёра; расположение рукояток и регулировок зависит от модели.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_machine_chest_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_machine_chest_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/machine-chest-press/frame-1.png",
+          "sha256": "1aa9dd7a108503da021580d828dbd49f99f322042c634ed4df7fd150bc1f7298",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0066-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pec_fly",
+      "origin": "workout-guide",
+      "upstreamSlug": "pec-deck",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/pec-deck",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример «бабочки» с опорой для предплечий; встречаются варианты с рукоятками.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pec_fly_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pec_fly_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/pec-deck/frame-1.png",
+          "sha256": "28219d91be42982ece8fbdb6e20dfcd1201b294eba2fb1f9d93a4c54dcfccb8b",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "dips",
+      "origin": "workout-guide",
+      "upstreamSlug": "chest-dip",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/chest-dip",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_dips_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dips_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/chest-dip/frame-1.png",
+          "sha256": "a555cb03b0cc1f8812fecaa1d4800e075d8d754edafb9df2a323f9751a1b6094",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0054-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pullup",
+      "origin": "workout-guide",
+      "upstreamSlug": "pull-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/pull-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pullup_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pullup_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/pull-up/frame-1.png",
+          "sha256": "241facc15d927a5c20818ba312a396f345a81d2546a21fb217e30396090f8917",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0087-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "lat_pulldown",
+      "origin": "workout-guide",
+      "upstreamSlug": "wide-grip-lat-pulldown",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/wide-grip-lat-pulldown",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример верхнего блока с широкой рукоятью. Тягу выполняют перед собой к верхней части груди.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_lat_pulldown_3",
+          "path": "app/src/main/res/drawable-nodpi/exercise_lat_pulldown_3.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/wide-grip-lat-pulldown/frame-3.png",
+          "sha256": "9236ae9251a31269753d7079530371dedcb84e23a0edaa5eeef7ed9160b515f5",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "seated_cable_row",
+      "origin": "workout-guide",
+      "upstreamSlug": "seated-row",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/seated-row",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример тяги с узкой рукоятью; конструкция опор зависит от тренажёра.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_seated_cable_row_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_seated_cable_row_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/seated-row/frame-1.png",
+          "sha256": "54204837ba7f4a22830585bf2549c6698e9eb7d980d21ece5698f50968b92ea1",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0025-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "bent_over_row",
+      "origin": "workout-guide",
+      "upstreamSlug": "barbell-row",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/barbell-row",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_bent_over_row_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_bent_over_row_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/barbell-row/frame-2.png",
+          "sha256": "d058fa699a99cf20227ea0047523466c6c8439fc9e15b18640e9200384d82492",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_bent_over_row_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_bent_over_row_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/barbell-row/frame-1.png",
+          "sha256": "362b4c0beb90d351f2c22f28d85932bc605c1c5af382148ecce608d60a4eee3d",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0026-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "back_extension",
+      "origin": "workout-guide",
+      "upstreamSlug": "back-extension",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/back-extension",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример наклонной скамьи для гиперэкстензии.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_back_extension_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_back_extension_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/back-extension/frame-1.png",
+          "sha256": "c6d7d1bc892cf8b65b9ce7127a24578a86292de28109a593d080e4d073533918",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0103-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "barbell_squat",
+      "origin": "workout-guide",
+      "upstreamSlug": "squat",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/squat",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_barbell_squat_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_barbell_squat_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/squat/frame-1.png",
+          "sha256": "3a5a4b9f763ca14f55dcca65dcde87acf88d6e5e538367fd8aa9c2a5a02e191c",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0122-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_barbell_squat_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_barbell_squat_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/squat/frame-2.png",
+          "sha256": "993b6f9bff8d2eb75e9882397370e23d19f66bda95dab465206727edc589a141",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "leg_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "leg-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример наклонного жима ногами; настройка сиденья и ограничителей зависит от модели.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_leg_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_leg_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-press/frame-1.png",
+          "sha256": "650a3a35d5e4a79ebec3ddb8d900d4fc324504dbed875170abfb4e1d76ea505f",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0127-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_leg_press_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_leg_press_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-press/frame-2.png",
+          "sha256": "5b05741f7eb470393aed5713386fe58f716b77697a1b1098ef5d47b079721811",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "leg_extension",
+      "origin": "workout-guide",
+      "upstreamSlug": "leg-extension",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-extension",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_leg_extension_2",
+          "path": "app/src/main/res/drawable-nodpi/exercise_leg_extension_2.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-extension/frame-2.png",
+          "sha256": "28f557617a82cafe8d9b5d49bab79116f57c8c4b5f222b769a0126759cf717f8",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        },
+        {
+          "resource": "exercise_leg_extension_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_leg_extension_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/leg-extension/frame-1.png",
+          "sha256": "7b139c4708ac492ebae534774a713b49f8d1e1d7a3c65014b28f2fe997efa993",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0142-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "machine_calf_raise",
+      "origin": "workout-guide",
+      "upstreamSlug": "standing-calf-raise",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/standing-calf-raise",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример подъёма на носки стоя с плечевыми упорами.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_machine_calf_raise_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_machine_calf_raise_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/standing-calf-raise/frame-1.png",
+          "sha256": "ab5fd8a91237451d8ee2c64af6002c92fabdd4b89039e6ac0f0c0f331e33a5e3",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0282-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "seated_dumbbell_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "seated-dumbbell-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/seated-dumbbell-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_seated_dumbbell_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_seated_dumbbell_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/seated-dumbbell-press/frame-1.png",
+          "sha256": "53d5ee5e1db6b64c7c2f90dab1581c8262e5c408092ec85797faff645e2abf6a",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "standing_barbell_press",
+      "origin": "workout-guide",
+      "upstreamSlug": "overhead-press",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/overhead-press",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_standing_barbell_press_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_standing_barbell_press_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/overhead-press/frame-1.png",
+          "sha256": "c0e1118c737a30aac96c29cc5b75c121bc9ce70e53fbf6b6952c142226b1bf67",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "lateral_raise",
+      "origin": "workout-guide",
+      "upstreamSlug": "lateral-raise",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/lateral-raise",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_lateral_raise_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_lateral_raise_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/lateral-raise/frame-1.png",
+          "sha256": "ce88e390582311a992ce7c86c9cd7def98c650f6d6581f74ed14a15e07df6d39",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0018-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "barbell_curl",
+      "origin": "workout-guide",
+      "upstreamSlug": "ez-bar-curl",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/ez-bar-curl",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "На рисунке вариант с EZ-грифом; форма грифа отличается от прямой штанги.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_barbell_curl_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_barbell_curl_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/ez-bar-curl/frame-1.png",
+          "sha256": "da95d38d92370e9dc59f1a3e7ee4fdfd3e555394223f35144ae77474e71ebd33",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0226-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "dumbbell_curl",
+      "origin": "workout-guide",
+      "upstreamSlug": "bicep-curl",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/bicep-curl",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_dumbbell_curl_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dumbbell_curl_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/bicep-curl/frame-1.png",
+          "sha256": "895857b03b21dcf1e36557d7c301b8a4635528d245541a59b2615a8d31c51247",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0224-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "hammer_curl",
+      "origin": "workout-guide",
+      "upstreamSlug": "hammer-curl",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/hammer-curl",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_hammer_curl_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_hammer_curl_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/hammer-curl/frame-1.png",
+          "sha256": "186d9582083a8ac4046b4731f41904ab282e897c097256e751fbf27badd3514b",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0227-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "lying_triceps_extension",
+      "origin": "workout-guide",
+      "upstreamSlug": "skull-crusher",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/skull-crusher",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Положение штанги над телом; движение выполняется преимущественно в локтях.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_lying_triceps_extension_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_lying_triceps_extension_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/skull-crusher/frame-1.png",
+          "sha256": "7fdacb189617fbacfc20ceea94689d848229d533325894f043a3af7e64908d5a",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0183-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "triceps_pushdown",
+      "origin": "workout-guide",
+      "upstreamSlug": "tricep-pushdown",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/tricep-pushdown",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример с прямой рукоятью верхнего блока.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_triceps_pushdown_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_triceps_pushdown_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/tricep-pushdown/frame-1.png",
+          "sha256": "85ef637f58ba23a51668d05187451fd762e23319ac796f3e4b4b40e0404b7af4",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0205-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "machine_biceps_curl",
+      "origin": "workout-guide",
+      "upstreamSlug": "preacher-curl",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/preacher-curl",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример бицепс-тренажёра с опорой под плечи; расположение рукояток зависит от модели.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_machine_biceps_curl_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_machine_biceps_curl_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/preacher-curl/frame-1.png",
+          "sha256": "30d258587440e3803b0cd2ea2e43590b499d9e4c2e3fda39355b4a78058aa6f8",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0236-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "hanging_leg_raise",
+      "origin": "workout-guide",
+      "upstreamSlug": "hanging-leg-raise",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/hanging-leg-raise",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "На рисунке колени немного согнуты; амплитуда и вариант выбираются по контролю движения.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_hanging_leg_raise_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_hanging_leg_raise_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/hanging-leg-raise/frame-1.png",
+          "sha256": "0227c1a15d5f5f5b7b5d82c0022822954dbaa4ab7328f4263c83216c3a9aa422",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "supported_calf_raise",
+      "origin": "workout-guide",
+      "upstreamSlug": "calf-raise",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/calf-raise",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Лёгкая опора руками для равновесия, без дополнительного веса.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_supported_calf_raise_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_supported_calf_raise_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/calf-raise/frame-1.png",
+          "sha256": "fccd41d7262633b7e021e0103d1331159be2182b8f88824bdba2bbc19055ade7",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "chest_supported_row",
+      "origin": "workout-guide",
+      "upstreamSlug": "chest-supported-row",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/chest-supported-row",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример тяги Т-грифа с грудной опорой; другие тренажёры могут выглядеть иначе.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_chest_supported_row_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_chest_supported_row_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/chest-supported-row/frame-1.png",
+          "sha256": "fb76cecbce0da1a8fb426b4ed695d7165e2e26e79a062434c154b845a604f456",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "glute_bridge",
+      "origin": "workout-guide",
+      "upstreamSlug": "glute-bridge",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/glute-bridge",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_glute_bridge_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_glute_bridge_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/glute-bridge/frame-1.png",
+          "sha256": "a2e61be9f5649edf831d2ba55118cf8da56c24eb16f750edc552bfad1056a642",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0109-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "walking",
+      "origin": "workout-guide",
+      "upstreamSlug": "walking",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/walking",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример ходьбы на дорожке. Рисунок показывает оборудование, а не обязательное положение рук.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_walking_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_walking_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/walking/frame-1.png",
+          "sha256": "b9026d5c1fc90779df8d3dc54f3fe955df2f88d96d9ea766349a8ca5b8ab66db",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "plank",
+      "origin": "workout-guide",
+      "upstreamSlug": "plank",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/plank",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_plank_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_plank_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/plank/frame-1.png",
+          "sha256": "8fca78008190ac00fb24317c7afa558b97042ebc2d1e2b781ce1faa34889c650",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_standard",
+      "origin": "workout-guide",
+      "upstreamSlug": "push-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Everkinetic; Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/push-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pushup_standard_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_standard_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/push-up/frame-1.png",
+          "sha256": "b294834ba2a586492bad7f8bffe5bc4e0478044542499ed9a14a1ef7d1a32333",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "source": {
+              "name": "Everkinetic",
+              "url": "https://github.com/everkinetic/data/blob/main/dist/svg/0077-tension.svg",
+              "license": "CC BY-SA 4.0",
+              "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+              "changes": "Rasterized on a transparent 512 × 512 canvas, recolored for monochrome display, and vector-traced."
+            }
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_wide",
+      "origin": "workout-guide",
+      "upstreamSlug": "wide-push-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/wide-push-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pushup_wide_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_wide_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/wide-push-up/frame-1.png",
+          "sha256": "e79969deec3d6fb427bcb1ea5d42112bde9cb5a58576d79047bc5d5e5fc19b45",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_narrow",
+      "origin": "workout-guide",
+      "upstreamSlug": "diamond-push-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/diamond-push-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Показан узкий вариант с ладонями ромбом; соединять пальцы необязательно.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pushup_narrow_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_narrow_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/diamond-push-up/frame-1.png",
+          "sha256": "117f6b3ae52ddf133eab3235b70a00799c8e09512c113221b8da50732cce87ed",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_knees",
+      "origin": "workout-guide",
+      "upstreamSlug": "knee-push-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/knee-push-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pushup_knees_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_knees_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/knee-push-up/frame-1.png",
+          "sha256": "d92a1a4cb88cf9e0e6d7e17e710627ef0554dd9b2655437e530e331dc9784f34",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_incline",
+      "origin": "workout-guide",
+      "upstreamSlug": "incline-push-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/incline-push-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pushup_incline_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_incline_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/incline-push-up/frame-1.png",
+          "sha256": "d6e19d0fea52f31912458a833ec503d7b0ea49d5194f50c23b11b84fc838c705",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pullup_assisted",
+      "origin": "workout-guide",
+      "upstreamSlug": "assisted-pull-up",
+      "upstreamCommit": "aac599224bb9780305239607ef98540b7e0ce389",
+      "credit": "Bryl Lim / Workout Guide · CC BY-SA 4.0",
+      "sourceUrl": "https://github.com/bryllim/workout-guide/tree/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/assisted-pull-up",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "caption": "Пример тренажёра с противовесом и опорой под колени.",
+      "darkBackground": true,
+      "frames": [
+        {
+          "resource": "exercise_pullup_assisted_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pullup_assisted_1.png",
+          "sourceUrl": "https://raw.githubusercontent.com/bryllim/workout-guide/aac599224bb9780305239607ef98540b7e0ce389/packages/workout-guide/assets/assisted-pull-up/frame-1.png",
+          "sha256": "47c99f12d9c5041dc2b34c9d1a1c096fba35d73e10e333595473e7b371f0870c",
+          "upstreamAttribution": {
+            "creator": "Bryl Lim",
+            "creatorUrl": "https://bryllim.com",
+            "license": "CC BY-SA 4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+          },
+          "changes": "None. Original upstream PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "dip_assisted",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Пример брусьев с противовесом и опорой под колени; конструкция зависит от модели.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_dip_assisted_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dip_assisted_1.png",
+          "sha256": "117fdc12a5eb1c34c8d5575085a4ba430befe32619236d85ebd8b0c299b9b6ba",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "bench_sit_to_stand",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Два положения одного движения. Высоту устойчивой скамьи подбирают по удобству.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_bench_sit_to_stand_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_bench_sit_to_stand_1.png",
+          "sha256": "43f2deeb2c878fe3bc32d6e571de7712e937a5fe53d660eee51e82856b2af6b1",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "dead_bug",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Два положения: исходное и выпрямление противоположных руки и ноги.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_dead_bug_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_dead_bug_1.png",
+          "sha256": "07d1fdafca88483d4853bbec5d09231c89da0527c09cceb16201e2a420ddf60d",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_low",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Ладони смещены ближе к поясу. Это отдельная постановка рук, а не уменьшенная амплитуда.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_pushup_low_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_low_1.png",
+          "sha256": "0d07b8c141ec024749d61bb64bc601465d8a5dca024f7072c6a2211fb0a593eb",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "reverse_pec_fly",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Пример обратной «бабочки»: грудь обращена к опоре, руки разводятся в стороны.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_reverse_pec_fly_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_reverse_pec_fly_1.png",
+          "sha256": "fec8e62f2da4a28fe44c2fadfc52796355864d4d94aa5e4aa06aca398e842b4d",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "pushup_high",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Показана постановка ладоней впереди плеч; это отдельный усложнённый вариант.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_pushup_high_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_pushup_high_1.png",
+          "sha256": "74edb1f9f94c9fdc2742b4beb90b01ef123cf952789fa662647997a8eb16f3a1",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "crunch",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Небольшой подъём лопаток: колени согнуты, стопы остаются на полу.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_crunch_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_crunch_1.png",
+          "sha256": "a2758a458edb0ae69a5ab49413ddb683b82c12612e3ceb317fccfcc48a941e03",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "bench_dip_reverse",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Вариант с согнутыми коленями и стопами на полу. Справочная иллюстрация, а не назначение нагрузки.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_bench_dip_reverse_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_bench_dip_reverse_1.png",
+          "sha256": "1b461187bc40d750dda59f09354ecf0c0b6a53be2bde7d78b2fd35f348821cac",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    },
+    {
+      "key": "lying_leg_curl",
+      "origin": "generated",
+      "credit": "Иллюстрация создана для ФитДневника с помощью ИИ",
+      "sourceUrl": "",
+      "licenseUrl": "",
+      "caption": "Пример тренажёра для сгибания ног лёжа; регулировки и рычаги зависят от модели.",
+      "darkBackground": true,
+      "provenanceDocument": "docs/EXERCISE_GENERATION.md",
+      "frames": [
+        {
+          "resource": "exercise_lying_leg_curl_1",
+          "path": "app/src/main/res/drawable-nodpi/exercise_lying_leg_curl_1.png",
+          "sha256": "773e52c54cd53df1ba246feef831c901a2e902240f773a013f3419d2229fa1f2",
+          "changes": "None. Original generated PNG bytes copied unchanged."
+        }
+      ]
+    }
+  ]
+}

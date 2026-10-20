@@ -23,9 +23,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Workout
-import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.Format
-import com.dtyan.fitdiary.ui.common.muscleGroupEmoji
 
 @Composable
 fun ActiveWorkoutScreen(
@@ -221,8 +221,7 @@ private fun ExerciseGroupCard(group: ExerciseGroupUi, enabled: Boolean, onToggle
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
         Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Открыть упражнение", onClick = onClick).padding(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            ExercisePhotoThumb(photoPath = group.photoPath, size = 44.dp,
-                fallback = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(muscleGroupEmoji(group.muscleGroup)) } })
+            ExerciseGuideThumb(ExerciseGuides.resolve(group.name), group.photoPath, size = 56.dp, displayName = group.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(group.name, style = MaterialTheme.typography.titleMedium)
                 if (group.planned) Text(if (group.completed) "✓ Выполнено" else "○ По плану",

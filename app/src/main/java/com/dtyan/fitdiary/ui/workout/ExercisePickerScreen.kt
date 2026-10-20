@@ -64,11 +64,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseSeed
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.EmptyState
 import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
 import com.dtyan.fitdiary.ui.common.IllustrationSearch
 import com.dtyan.fitdiary.ui.common.SectionHeader
-import com.dtyan.fitdiary.ui.common.muscleGroupEmoji
 import com.dtyan.fitdiary.ui.common.rememberPhotoPicker
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlinx.coroutines.launch
@@ -275,29 +276,12 @@ private fun ExerciseRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Фото тренажёра; без фото — эмодзи группы мышц на подложке.
-        ExercisePhotoThumb(
-            photoPath = exercise.photoPath,
-            size = 44.dp,
-            fallback = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        muscleGroupEmoji(exercise.muscleGroup),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            },
-        )
+        ExerciseGuideThumb(ExerciseGuides.forExercise(exercise), exercise.photoPath, size = 56.dp, displayName = exercise.name)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = exercise.name,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(

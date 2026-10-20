@@ -33,6 +33,8 @@ import com.dtyan.fitdiary.data.db.ActivityDefinition
 import com.dtyan.fitdiary.data.db.ActivityEntry
 import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.ActivityProgression
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.Format
 import java.time.Instant
 import java.time.LocalDate
@@ -281,7 +283,11 @@ private fun ActivityDefinitionCard(definition: ActivityDefinition, entries: List
     onRestore: () -> Unit) {
     Surface(shape = MaterialTheme.shapes.large, tonalElevation = 1.dp) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(definition.name + if (definition.isArchived) " · архив" else "", style = MaterialTheme.typography.titleLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                ExerciseGuideThumb(ExerciseGuides.forActivity(definition), displayName = definition.name)
+                Text(definition.name + if (definition.isArchived) " · архив" else "", style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f))
+            }
             if (definition.instructions.isNotBlank()) Text(definition.instructions, style = MaterialTheme.typography.bodySmall)
             definition.weeklyScheduleNote?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             ActivityProgressCard(definition, entries)

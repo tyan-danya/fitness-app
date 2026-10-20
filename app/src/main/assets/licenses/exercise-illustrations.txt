@@ -1,0 +1,44 @@
+FitDiary exercise illustrations
+==============================
+
+Unmodified PNG illustrations from Workout Guide by Bryl Lim, revision aac599224bb9780305239607ef98540b7e0ce389.
+Original Everkinetic pose artwork was created by Greg Priday; specific inherited source URLs and attribution are preserved in exercise-artwork-provenance.json.
+Source: https://github.com/bryllim/workout-guide
+Artwork license: Creative Commons Attribution-ShareAlike 4.0 International.
+License: https://creativecommons.org/licenses/by-sa/4.0/
+
+The app shows per-image credits and source/license links. Artwork files are separate from application source code. No additional restrictions are imposed on these CC BY-SA files.
+PNG bytes were copied without cropping, recoloring, tracing, or other modification. Display backgrounds do not modify the bundled files.
+
+Separately generated illustrations are marked origin=generated in the provenance manifest and in the app. They are not sourced from Workout Guide and are not represented as CC-licensed upstream images. Their creation details are in docs/EXERCISE_GENERATION.md.
+
+Upstream attribution
+--------------------
+# Attribution
+
+The original pose artwork used by Workout Guide comes from
+[Everkinetic](https://github.com/everkinetic/data), licensed under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+[Bryl Lim](https://bryllim.com) expanded upon that foundation with additional
+exercises and animation frames, normalized transparent 512 × 512 assets,
+structured metadata, package APIs, and the documentation gallery. Seventy-six
+first-pose frames are vector-traced adaptations of rasterized Everkinetic SVGs; their
+exact source URLs and recorded changes are retained in
+`packages/workout-guide/manifest.json`.
+
+
+Upstream visual asset license
+-----------------------------
+Workout Guide visual assets are licensed under the Creative Commons
+Attribution-ShareAlike 4.0 International license (CC BY-SA 4.0).
+
+Copyright (c) 2026 Bryl Lim, except where ATTRIBUTION.md identifies an
+upstream source.
+
+You may share and adapt these assets for any purpose, including commercially,
+provided that you give appropriate credit, link to the license, indicate
+changes, and distribute adaptations under the same license.
+
+License text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+Human-readable summary: https://creativecommons.org/licenses/by-sa/4.0/
