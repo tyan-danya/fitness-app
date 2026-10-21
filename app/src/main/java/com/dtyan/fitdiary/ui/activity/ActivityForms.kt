@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.data.db.ActivityDefinition
 import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.ActivityMetric
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
 import com.dtyan.fitdiary.ui.common.Format
 import java.time.LocalDate
 
@@ -101,10 +103,12 @@ internal fun ActivityGoalsDialog(definition: ActivityDefinition, busy: Boolean, 
                 Column {
                     ActivityNumberField("Ступень ${index + 1}", value, { text -> rows = rows.mapIndexed { i, old -> if (i == index) text else old } }, busy,
                         decimal = inMinutes || definition.goalMetric == ActivityMetric.DISTANCE_KM)
-                    TextButton(onClick = { rows = rows.filterIndexed { i, _ -> i != index } }, enabled = !busy) { Text("Убрать ступень ${index + 1}") }
+                    FitButton("Убрать ступень ${index + 1}", { rows = rows.filterIndexed { i, _ -> i != index } },
+                        kind = FitButtonKind.Plain, compact = true, enabled = !busy)
                 }
             }
-            OutlinedButton(onClick = { rows = rows + "" }, enabled = !busy && rows.size < 30, modifier = Modifier.fillMaxWidth()) { Text("Добавить ступень") }
+            FitButton("Добавить ступень", { rows = rows + "" }, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined,
+                enabled = !busy && rows.size < 30)
             Text("Пустая лестница отключает цель, история остаётся.", style = MaterialTheme.typography.bodySmall)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }

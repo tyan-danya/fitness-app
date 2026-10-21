@@ -165,6 +165,15 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
         publishSettings()
     }
 
+    /** Подключение ИИ общее для всех профилей; пустые URL и модель возвращают значения по умолчанию. */
+    fun updateAiConnection(baseUrl: String, model: String, apiKey: String) = update {
+        it.copy(
+            aiBaseUrl = baseUrl.trim().ifBlank { DEFAULT_AI_BASE_URL },
+            aiModel = model.trim().ifBlank { DEFAULT_AI_MODEL },
+            aiApiKey = apiKey.trim(),
+        )
+    }
+
     private val personalKeys = setOf("calorieGoal", "proteinGoalG", "fatGoalG", "carbGoalG",
         "trackedMeasurements", "measurementReminderEnabled", "measurementReminderDays",
         "measurementReminderHour", "measurementReminderSinceDay", PUSH_UP_DAILY_GOAL)

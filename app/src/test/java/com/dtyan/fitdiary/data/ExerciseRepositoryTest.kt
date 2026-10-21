@@ -4,12 +4,20 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.data.db.AppDatabase
+import com.dtyan.fitdiary.data.db.Athlete
+import com.dtyan.fitdiary.data.db.FavoriteExercise
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -136,5 +144,106 @@ class ExerciseRepositoryTest {
         assertThat(visible.map { it.id }).containsExactly(e1)
         // Из БД упражнение не удалено — только скрыто.
         assertThat(repo.getById(e2)!!.isArchived).isTrue()
+    }
+
+    // ---------- избранное ----------
+
+    /** In-memory БД без сид-колбэка: профили для внешних ключей избранного заводим сами. */
+    private suspend fun addProfiles() {
+        db.athleteDao().insert(Athlete(1, "Я"))
+        db.athleteDao().insert(Athlete(2, "Друг"))
+    }
+
+    private fun favoriteCreatedAt(athleteId: Long, exerciseId: Long): Long? =
+        db.openHelper.readableDatabase.query(
+            "SELECT createdAt FROM favorite_exercises WHERE athleteId = ? AND exerciseId = ?",
+            arrayOf<Any>(athleteId, exerciseId),
+        ).use { if (it.moveToFirst()) it.getLong(0) else null }
+
+    @Test
+    fun favorites_arePerProfile_whileCatalogIsShared() = runTest {
+        addProfiles()
+        val e1 = repo.addCustom("Жим лёжа", "Грудь")
+        val e2 = repo.addCustom("Присед", "Ноги")
+        val friend = ExerciseRepository(db.exerciseDao(), db.workoutSetDao(), MutableStateFlow(2L))
+
+        repo.setFavorite(e1, true) // активный профиль 1 по умолчанию
+        friend.setFavorite(e2, true) // активный профиль 2
+
+        assertThat(repo.observeFavoriteIds().first()).containsExactly(e1)
+        assertThat(friend.observeFavoriteIds().first()).containsExactly(e2)
+        assertThat(repo.observeFavoriteIds(athleteId = 2).first()).containsExactly(e2)
+        // Каталог общий: оба видят оба упражнения.
+        assertThat(friend.observeExercises().first().map { it.id }).containsExactly(e1, e2)
+
+        // Снятие отметки у одного профиля не трогает другой.
+        friend.setFavorite(e1, true)
+        repo.setFavorite(e1, false)
+        assertThat(repo.observeFavoriteIds().first()).isEmpty()
+        assertThat(friend.observeFavoriteIds().first()).containsExactly(e1, e2)
+    }
+
+    @Test
+    fun setFavorite_isIdempotent_andKeepsOriginalTime() = runTest {
+        addProfiles()
+        val e1 = repo.addCustom("Жим лёжа", "Грудь")
+        db.exerciseDao().insertFavorite(FavoriteExercise(athleteId = 1, exerciseId = e1, createdAt = 1L))
+
+        repo.setFavorite(e1, true)
+        repo.setFavorite(e1, true)
+        assertThat(db.exerciseDao().getFavoriteIds(1)).containsExactly(e1) // одна строка
+        assertThat(favoriteCreatedAt(1, e1)).isEqualTo(1L) // время первой отметки не сдвинулось
+
+        repo.setFavorite(e1, false)
+        repo.setFavorite(e1, false) // повторное снятие — без ошибки
+        repo.setFavorite(e1, false, athleteId = 2) // и снятие никогда не отмеченного
+        assertThat(db.exerciseDao().getFavoriteIds(1)).isEmpty()
+        assertThat(favoriteCreatedAt(1, e1)).isNull()
+
+        val before = System.currentTimeMillis()
+        repo.setFavorite(e1, true)
+        assertThat(favoriteCreatedAt(1, e1)!!).isAtLeast(before)
+    }
+
+    @Test
+    fun setFavorite_rejectsMissingProfileOrExercise() = runTest {
+        addProfiles()
+        val e1 = repo.addCustom("Жим лёжа", "Грудь")
+        val noProfile = ExerciseRepository(db.exerciseDao(), db.workoutSetDao(), MutableStateFlow(0L))
+
+        assertThat(runCatching { noProfile.setFavorite(e1, true) }.exceptionOrNull())
+            .isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(runCatching { repo.setFavorite(e1, true, athleteId = -1) }.exceptionOrNull())
+            .isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(runCatching { repo.setFavorite(0, true) }.exceptionOrNull())
+            .isInstanceOf(IllegalArgumentException::class.java)
+        // Внешние ключи: несуществующие профиль и упражнение не попадают в избранное.
+        assertThat(runCatching { repo.setFavorite(e1, true, athleteId = 99) }.isFailure).isTrue()
+        assertThat(runCatching { repo.setFavorite(999, true) }.isFailure).isTrue()
+        assertThat(db.exerciseDao().getFavoriteIds(1)).isEmpty()
+        assertThat(db.exerciseDao().getFavoriteIds(99)).isEmpty()
+    }
+
+    @Test
+    fun observeFavoriteIds_emitsEachChangeOfThisProfileOnly() = runTest {
+        addProfiles()
+        val e1 = repo.addCustom("Жим лёжа", "Грудь")
+        val e2 = repo.addCustom("Присед", "Ноги")
+        val emissions = Channel<Set<Long>>(Channel.UNLIMITED)
+        // Room выдаёт значения со своих потоков, поэтому ждём в реальном времени.
+        backgroundScope.launch(Dispatchers.Default) { repo.observeFavoriteIds(1).collect { emissions.send(it) } }
+        suspend fun next(): Set<Long> = withContext(Dispatchers.Default) { withTimeout(5_000) { emissions.receive() } }
+
+        assertThat(next()).isEmpty()
+        repo.setFavorite(e1, true)
+        assertThat(next()).containsExactly(e1)
+        // Изменение чужого избранного не порождает повторной выдачи того же набора.
+        repo.setFavorite(e2, true, athleteId = 2)
+        repo.setFavorite(e2, true)
+        assertThat(next()).containsExactly(e1, e2)
+        repo.setFavorite(e1, false)
+        assertThat(next()).containsExactly(e2)
+        repo.setFavorite(e2, false)
+        assertThat(next()).isEmpty()
     }
 }

@@ -28,7 +28,7 @@ import java.time.temporal.WeekFields
 
 /**
  * Тесты StatsViewModel поверх реальной in-memory Room-БД.
- * Календарь/тоннаж/вес привязаны к «сейчас» внутри VM (YearMonth.now,
+ * Календарь и тоннаж привязаны к «сейчас» внутри VM (YearMonth.now,
  * LocalDate.now, System.currentTimeMillis), поэтому данные создаются
  * относительно текущего момента.
  */
@@ -72,7 +72,6 @@ class StatsViewModelTest {
     }
 
     private fun createVm() = StatsViewModel(
-        appContext = appContext,
         workoutRepository = workoutRepo,
         nutritionRepository = nutritionRepo,
         statsRepository = statsRepo,
@@ -156,42 +155,6 @@ class StatsViewModelTest {
         // Обе тренировки одной ISO-недели суммируются.
         assertThat(bars.last().volumeKg).isWithin(1e-9).of(1300.0)
         assertThat(bars.dropLast(1).sumOf { it.volumeKg }).isEqualTo(0.0)
-    }
-
-    // ---------- Вес: дельта за 30 дней ----------
-
-    @Test
-    fun weight_delta30d_gain_baselineOlderThan30Days() = runTest {
-        val now = System.currentTimeMillis()
-        statsRepo.addWeightEntry(70.0, now = now - 100 * day) // старше 90 дней — вне графика
-        statsRepo.addWeightEntry(80.0, now = now - 40 * day) // база для дельты
-        statsRepo.addWeightEntry(82.5, now = now - 1 * day) // текущий
-
-        val vm = createVm()
-        backgroundScope.launch { vm.weight.collect { } }
-        advanceUntilIdle()
-
-        val weight = vm.weight.value
-        assertThat(weight.current?.weightKg).isEqualTo(82.5)
-        assertThat(weight.delta30d).isNotNull()
-        assertThat(weight.delta30d!!).isWithin(1e-9).of(2.5) // 82,5 − 80,0
-        // На графике только последние 90 дней.
-        assertThat(weight.chartPoints.map { it.second }).containsExactly(80.0, 82.5).inOrder()
-    }
-
-    @Test
-    fun weight_delta30d_loss_negativeValue() = runTest {
-        val now = System.currentTimeMillis()
-        statsRepo.addWeightEntry(90.0, now = now - 35 * day)
-        statsRepo.addWeightEntry(85.5, now = now - 2 * hour)
-
-        val vm = createVm()
-        backgroundScope.launch { vm.weight.collect { } }
-        advanceUntilIdle()
-
-        val weight = vm.weight.value
-        assertThat(weight.current?.weightKg).isEqualTo(85.5)
-        assertThat(weight.delta30d!!).isWithin(1e-9).of(-4.5) // 85,5 − 90,0
     }
 
     // ---------- Прогресс упражнения ----------

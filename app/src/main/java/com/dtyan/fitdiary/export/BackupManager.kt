@@ -63,8 +63,15 @@ class BackupManager(
         private const val MAX_ROWS = 200_000
         private val V6_TABLES = listOf("athletes", "exercises", "workout_templates", "template_exercises", "workouts", "workout_sets", "workout_exercises", "meals", "weight_entries", "body_measurements")
         private val ACTIVITY_TABLES = listOf("activity_definitions", "activity_plans", "activity_entries", "activity_timers")
-        private val TABLES = V6_TABLES + ACTIVITY_TABLES
+        private val V7_TABLES = V6_TABLES + ACTIVITY_TABLES
+        // Restored after athletes and exercises; deleted first (TABLES is cleared in reverse).
+        private const val FAVORITES = "favorite_exercises"
+        private val TABLES = V7_TABLES + FAVORITES
         private val V5_TABLES = V6_TABLES.filterNot { it in setOf("workout_templates", "template_exercises") }.toSet()
+        /** Schema this build writes and restores; older portable documents are upgraded to it first. */
+        private const val SCHEMA_VERSION = 8
+        /** Older schema 5/6 backups and those of app 1.7–1.10 (schema 7) stay restorable. */
+        private val UPGRADABLE_VERSIONS = setOf(5, 6, 7)
         private val PHOTO_PATH = Regex("exercise_photos/[A-Za-z0-9_-]+\\.jpg")
     }
 
@@ -131,6 +138,7 @@ class BackupManager(
                     val order = when (table) {
                         "workout_exercises" -> "workoutId, position"
                         "template_exercises" -> "templateId, position"
+                        FAVORITES -> "athleteId, exerciseId"
                         else -> "id"
                     }
                     sql.query("SELECT * FROM `$table` ORDER BY $order").use { cursor ->
@@ -261,13 +269,22 @@ class BackupManager(
 
     private data class Column(val name: String, val type: String, val required: Boolean)
 
-    /** Upgrade portable data without inventing historical targets or performances. */
+    /**
+     * Upgrade portable data without inventing historical targets, performances or favorites.
+     * Unknown versions are returned as is for validate() to reject; an older document must carry
+     * exactly the table set of its own version.
+     */
     private fun upgradeDocument(document: JsonObject): JsonObject {
         val version = document["schemaVersion"]?.jsonPrimitive?.intOrNull
-        if (version !in setOf(5, 6) || database.openHelper.writableDatabase.version != 7) return document
+        if (version !in UPGRADABLE_VERSIONS || database.openHelper.writableDatabase.version != SCHEMA_VERSION) return document
         require(document["format"]?.jsonPrimitive?.content == FORMAT) { "Неизвестный формат резервной копии" }
         val tables = document["tables"] as? JsonObject ?: error("Отсутствует дневник")
-        require(tables.keys == if (version == 5) V5_TABLES else V6_TABLES.toSet()) { "Неполный набор таблиц старой копии" }
+        val expected = when (version) {
+            5 -> V5_TABLES
+            6 -> V6_TABLES.toSet()
+            else -> V7_TABLES.toSet()
+        }
+        require(tables.keys == expected) { "Неполный набор таблиц старой копии" }
         val upgraded = tables.toMutableMap()
         if (version == 5) {
             val oldPlan = tables["workout_exercises"] as? JsonArray ?: error("Отсутствует план тренировки")
@@ -282,9 +299,11 @@ class BackupManager(
             upgraded["workout_templates"] = JsonArray(emptyList())
             upgraded["template_exercises"] = JsonArray(emptyList())
         }
-        ACTIVITY_TABLES.forEach { upgraded[it] = JsonArray(emptyList()) }
+        if (version == 5 || version == 6) ACTIVITY_TABLES.forEach { upgraded[it] = JsonArray(emptyList()) }
+        // Favorites appeared in schema 8: an older diary simply has none.
+        upgraded[FAVORITES] = JsonArray(emptyList())
         return JsonObject(document.toMutableMap().apply {
-            put("schemaVersion", JsonPrimitive(7))
+            put("schemaVersion", JsonPrimitive(SCHEMA_VERSION))
             put("tables", JsonObject(upgraded))
         })
     }
@@ -337,6 +356,10 @@ class BackupManager(
                     row["targetSets"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..100) { "Некорректная цель подходов" } }
                     row["targetReps"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..999) { "Некорректная цель повторов" } }
                     row["note"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.content.length <= 500) { "Слишком длинное примечание" } }
+                } else if (table == FAVORITES) {
+                    // Composite key like a plan: one mark per profile and exercise, no own id.
+                    require(compositeIds.add(row["athleteId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long)) { "Повторяющееся избранное упражнение" }
+                    require(row["createdAt"]!!.jsonPrimitive.long >= 0) { "Некорректное время добавления в избранное" }
                 } else {
                     val id = row.getValue("id").jsonPrimitive.long
                     require(id > 0 && rowIds.add(id)) { "Повторяющиеся идентификаторы" }
@@ -365,7 +388,7 @@ class BackupManager(
             it.jsonObject["id"]!!.jsonPrimitive.long == 1L && it.jsonObject["isArchived"]!!.jsonPrimitive.int == 0
         }) { "Основной профиль отсутствует или скрыт" }
         val profiles = ids.getValue("athletes")
-        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates", "activity_definitions", "activity_plans")) {
+        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates", "activity_definitions", "activity_plans", FAVORITES)) {
             tables[table]!!.jsonArray.forEach { require(it.jsonObject["athleteId"]!!.jsonPrimitive.long in profiles) { "Запись без профиля" } }
         }
         val workouts = tables["workouts"]!!.jsonArray.map { it.jsonObject }
@@ -394,6 +417,9 @@ class BackupManager(
         tables["template_exercises"]!!.jsonArray.forEach { element ->
             val row = element.jsonObject
             require(row["templateId"]!!.jsonPrimitive.long in ids.getValue("workout_templates") && row["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Программа ссылается на отсутствующее упражнение" }
+        }
+        tables[FAVORITES]!!.jsonArray.forEach { element ->
+            require(element.jsonObject["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Избранное ссылается на отсутствующее упражнение" }
         }
         val templateItems = tables["template_exercises"]!!.jsonArray.groupBy { it.jsonObject["templateId"]!!.jsonPrimitive.long }
         ids.getValue("workout_templates").forEach { require((templateItems[it]?.size ?: 0) in 1..100) { "В программе должно быть от 1 до 100 упражнений" } }

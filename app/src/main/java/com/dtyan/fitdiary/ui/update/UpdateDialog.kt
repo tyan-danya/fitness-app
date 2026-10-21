@@ -4,16 +4,20 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -21,6 +25,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dtyan.fitdiary.BuildConfig
 import com.dtyan.fitdiary.data.update.AppUpdater
 import com.dtyan.fitdiary.data.update.UpdatePhase
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.sectionColors
 import java.util.Locale
 
 @Composable
@@ -48,18 +56,15 @@ fun UpdateDialog(updater: AppUpdater, onDismiss: () -> Unit) {
                     } else if (state.busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     state.message?.let { Text(it, color = if (state.phase == UpdatePhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
                     if (state.canInstall) {
-                        Button(onClick = { activity?.let(updater::install) }, enabled = activity != null, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.phase == UpdatePhase.NEEDS_PERMISSION) "Разрешить установку в Android" else "Установить обновление")
-                        }
+                        FitButton(if (state.phase == UpdatePhase.NEEDS_PERMISSION) "Разрешить установку в Android" else "Установить обновление",
+                            { activity?.let(updater::install) }, Modifier.fillMaxWidth(), enabled = activity != null)
                     } else if (state.release != null && !state.busy) {
-                        Button(onClick = { updater.downloadNow(allowMetered = true) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Скачать сейчас · любая сеть")
-                        }
+                        FitButton("Скачать сейчас · любая сеть", { updater.downloadNow(allowMetered = true) }, Modifier.fillMaxWidth())
                     }
                     if (state.phase == UpdatePhase.DOWNLOADING || state.phase == UpdatePhase.WAITING_FOR_WIFI) {
-                        TextButton(onClick = updater::cancelDownload) { Text("Отменить загрузку") }
+                        FitButton("Отменить загрузку", updater::cancelDownload, Modifier.fillMaxWidth(), kind = FitButtonKind.Plain)
                     }
-                    OutlinedButton(onClick = updater::checkNow, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Проверить обновления") }
+                    FitButton("Проверить обновления", updater::checkNow, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined, enabled = !state.busy)
                 }
             }
         },
@@ -67,23 +72,28 @@ fun UpdateDialog(updater: AppUpdater, onDismiss: () -> Unit) {
     )
 }
 
+/** Карточка на главной, пока есть что скачать или установить. */
 @Composable
 fun UpdateBanner(updater: AppUpdater, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val state by updater.state.collectAsStateWithLifecycle()
-    if (state.release == null || state.phase in setOf(UpdatePhase.DISABLED, UpdatePhase.UP_TO_DATE)) return
-    Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.secondaryContainer) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    val release = state.release
+    if (release == null || state.phase in setOf(UpdatePhase.DISABLED, UpdatePhase.UP_TO_DATE)) return
+    val colors = sectionColors()
+    FitCard(modifier, onClick = onOpen, onClickLabel = "Открыть обновления", color = colors.container, contentColor = colors.onContainer,
+        contentPadding = PaddingValues(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Icon(Icons.Rounded.SystemUpdate, contentDescription = null)
             Text(
                 when (state.phase) {
-                    UpdatePhase.READY, UpdatePhase.NEEDS_PERMISSION -> "Версия ${state.release!!.version} готова к установке"
-                    UpdatePhase.DOWNLOADING -> "Обновление: ${state.progress}%"
+                    UpdatePhase.READY, UpdatePhase.NEEDS_PERMISSION -> "Версия ${release.version} готова к установке"
+                    UpdatePhase.DOWNLOADING -> "Скачиваем обновление: ${state.progress}%"
                     UpdatePhase.VERIFYING -> "Проверяем обновление…"
-                    else -> "Доступна версия ${state.release!!.version}"
+                    else -> "Доступна версия ${release.version}"
                 },
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp),
-                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
             )
-            TextButton(onClick = onOpen) { Text("Открыть") }
+            FitButton("Открыть", onOpen, kind = FitButtonKind.Plain, compact = true)
         }
     }
 }

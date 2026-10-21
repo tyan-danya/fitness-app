@@ -12,24 +12,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.MonitorWeight
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.rounded.Bookmarks
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -44,22 +40,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.SetWithExercise
+import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.EmptyState
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
 import com.dtyan.fitdiary.ui.common.IllustrationSearch
-import com.dtyan.fitdiary.ui.common.muscleGroupEmoji
+import com.dtyan.fitdiary.ui.common.MenuAction
+import com.dtyan.fitdiary.ui.common.OverflowMenu
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import java.time.Instant
 import java.time.ZoneId
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkoutDetailsScreen(
     workoutId: Long,
     onBack: () -> Unit,
     onRepeatWorkout: ((Long) -> Unit)? = null,
     onSaveTemplate: ((Long) -> Unit)? = null,
-) {
+) = FitSectionScope(FitSection.STATS) {
     val container = LocalContext.current.appContainer
     val vm: WorkoutDetailsViewModel = viewModel(key = "workout_details_$workoutId") {
         WorkoutDetailsViewModel(
@@ -79,23 +83,20 @@ fun WorkoutDetailsScreen(
     } else {
         "Тренировка"
     }
+    val owner = workout?.let { w -> athletes.firstOrNull { it.id == w.athleteId }?.name ?: "Участник" }
 
     Scaffold(
         // Отступы системных панелей уже применяет внешний Scaffold в AppRoot — иначе они удвоятся
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                windowInsets = WindowInsets(0.dp),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
+            DetailTopBar(
+                title = title,
+                subtitle = owner,
+                onBack = onBack,
                 actions = {
-                    if (workout != null) IconButton(onClick = { showDelete = true }, enabled = !state.busy) {
-                        Icon(Icons.Filled.Delete, "Удалить тренировку")
-                    }
+                    if (workout != null) OverflowMenu(listOf(
+                        MenuAction("Удалить тренировку", Icons.Rounded.Delete, destructive = true) { showDelete = true },
+                    ), enabled = !state.busy)
                 },
             )
         },
@@ -125,10 +126,8 @@ fun WorkoutDetailsScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    item(key = "owner") {
-                        Text(athletes.firstOrNull { it.id == workout.athleteId }?.name ?: "Участник",
-                            style = MaterialTheme.typography.titleMedium)
-                        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    state.error?.let { error ->
+                        item(key = "error") { Text(error, color = MaterialTheme.colorScheme.error) }
                     }
                     item(key = "summary") {
                         WorkoutHeaderCard(
@@ -142,17 +141,24 @@ fun WorkoutDetailsScreen(
                     items(state.groups, key = { it.exerciseId }) { group ->
                         ExerciseGroupCard(group)
                     }
-                    if (onSaveTemplate != null && state.groups.isNotEmpty()) item(key = "save_template") {
-                        OutlinedButton(onClick = { onSaveTemplate(workoutId) }, enabled = !state.busy,
-                            modifier = Modifier.fillMaxWidth()) { Text("Сохранить как программу") }
-                    }
-                    if (onRepeatWorkout != null && state.groups.isNotEmpty()) item(key = "repeat") {
-                        OutlinedButton(onClick = { vm.repeatWorkout(onRepeatWorkout) },
-                            enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.busy) "Готовим…" else "Повторить список упражнений")
+                    if ((onSaveTemplate != null || onRepeatWorkout != null) && state.groups.isNotEmpty()) item(key = "actions") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FitButtonRow(
+                                first = { m ->
+                                    if (onRepeatWorkout != null) FitButton(if (state.busy) "Готовим…" else "Повторить список упражнений",
+                                        { vm.repeatWorkout(onRepeatWorkout) }, m, kind = FitButtonKind.Tonal,
+                                        icon = Icons.Rounded.Replay, enabled = !state.busy, section = FitSection.WORKOUT)
+                                },
+                                second = { m ->
+                                    if (onSaveTemplate != null) FitButton("Сохранить как программу", { onSaveTemplate(workoutId) }, m,
+                                        kind = FitButtonKind.Outlined, icon = Icons.Rounded.Bookmarks, enabled = !state.busy,
+                                        section = FitSection.WORKOUT)
+                                },
+                                minWidthForRow = 360.dp,
+                            )
+                            Text("Повтор создаёт новую тренировку с теми же упражнениями. Подходы и веса не копируются.",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("Новая тренировка с теми же упражнениями. Подходы и веса не копируются.",
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -203,7 +209,7 @@ private fun WorkoutHeaderCard(
                 )
                 HeaderStat(
                     value = setCount.toString(),
-                    label = plural(setCount, "подход", "подхода", "подходов"),
+                    label = Format.plural(setCount, "подход", "подхода", "подходов"),
                     modifier = Modifier.weight(0.85f),
                 )
                 HeaderStat(
@@ -218,7 +224,7 @@ private fun WorkoutHeaderCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.MonitorWeight,
+                        imageVector = Icons.Rounded.MonitorWeight,
                         contentDescription = null,
                         tint = accents.onStatsContainer,
                         modifier = Modifier.size(16.dp),
@@ -258,10 +264,9 @@ private fun HeaderStat(
     }
 }
 
-/** Секция упражнения: аватар группы мышц, название и подходы построчно. */
+/** Секция упражнения: схема упражнения, название и подходы построчно. */
 @Composable
 private fun ExerciseGroupCard(group: ExerciseGroup) {
-    val accents = fitAccents
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -275,17 +280,7 @@ private fun ExerciseGroupCard(group: ExerciseGroup) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Surface(shape = CircleShape, color = accents.statsContainer) {
-                    Box(
-                        modifier = Modifier.size(44.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = muscleGroupEmoji(group.muscleGroup),
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                    }
-                }
+                ExerciseGuideThumb(ExerciseGuides.resolve(group.exerciseName), size = 48.dp, displayName = group.exerciseName)
                 Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(group.exerciseName, style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -325,7 +320,7 @@ private fun SetRow(set: SetWithExercise, isBest: Boolean) {
         )
         if (isBest) {
             Icon(
-                imageVector = Icons.Filled.EmojiEvents,
+                imageVector = Icons.Rounded.EmojiEvents,
                 contentDescription = null,
                 tint = fitAccents.gold,
                 modifier = Modifier.size(16.dp),

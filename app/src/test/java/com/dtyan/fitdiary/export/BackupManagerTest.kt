@@ -208,7 +208,7 @@ class BackupManagerTest {
         val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
         val tables = document["tables"]!!.jsonObject.toMutableMap().apply {
             keys.filter { it.startsWith("activity_") }.forEach { remove(it) }
-            remove("workout_templates"); remove("template_exercises")
+            remove("workout_templates"); remove("template_exercises"); remove("favorite_exercises")
             put("workout_exercises", JsonArray(getValue("workout_exercises").jsonArray.map { row ->
                 JsonObject(row.jsonObject.filterKeys { it in setOf("workoutId", "exerciseId", "position") })
             }))
@@ -306,7 +306,7 @@ class BackupManagerTest {
         val content = entries(archive)
         val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
         val old = JsonObject(document + mapOf("schemaVersion" to JsonPrimitive(6),
-            "tables" to JsonObject(document["tables"]!!.jsonObject.filterKeys { !it.startsWith("activity_") })))
+            "tables" to JsonObject(document["tables"]!!.jsonObject.filterKeys { !it.startsWith("activity_") && it != "favorite_exercises" })))
         val preview = manager.inspectArchive(ByteArrayInputStream(zip(content + ("diary.json" to old.toString().toByteArray()))))
         manager.restoreBackup(preview)
         assertThat(preview.templates).isEqualTo(1)
@@ -339,5 +339,99 @@ class BackupManagerTest {
         assertThat(db.workoutSetDao().getForWorkoutOnce(1)).hasSize(1)
         assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
         assertThat(settings.settings.value.calorieGoal).isEqualTo(2500)
+    }
+
+    private fun favoriteCreatedAt(athleteId: Long, exerciseId: Long): Long? =
+        db.openHelper.readableDatabase.query(
+            "SELECT createdAt FROM favorite_exercises WHERE athleteId = ? AND exerciseId = ?", arrayOf<Any>(athleteId, exerciseId),
+        ).use { if (it.moveToFirst()) it.getLong(0) else null }
+
+    private fun favoriteRow(athleteId: Long, exerciseId: Long, createdAt: Long) = buildJsonObject {
+        put("athleteId", athleteId); put("exerciseId", exerciseId); put("createdAt", createdAt)
+    }
+
+    @Test fun favoritesSurviveRoundTripPerProfileWithOriginalTimes() = runTest {
+        seed()
+        db.exerciseDao().insert(Exercise(2, "Squat", "Legs"))
+        db.exerciseDao().insertFavorite(FavoriteExercise(2, 2, 3000))
+        db.exerciseDao().insertFavorite(FavoriteExercise(1, 2, 1000))
+        db.exerciseDao().insertFavorite(FavoriteExercise(2, 1, 2000))
+        manager.writeArchive(archive)
+        val document = Json.parseToJsonElement(entries(archive).getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        assertThat(document["schemaVersion"]!!.jsonPrimitive.int).isEqualTo(8)
+        // Deterministic snapshot order: athleteId, exerciseId.
+        assertThat(document["tables"]!!.jsonObject.getValue("favorite_exercises").jsonArray.map {
+            it.jsonObject["athleteId"]!!.jsonPrimitive.long to it.jsonObject["exerciseId"]!!.jsonPrimitive.long
+        }).containsExactly(1L to 2L, 2L to 1L, 2L to 2L).inOrder()
+
+        db.exerciseDao().deleteFavorite(2, 1)
+        db.exerciseDao().insertFavorite(FavoriteExercise(1, 1, 4000))
+        val preview = manager.inspectArchive(archive.inputStream())
+        manager.restoreBackup(preview)
+        assertThat(db.exerciseDao().getFavoriteIds(1)).containsExactly(2L)
+        assertThat(db.exerciseDao().getFavoriteIds(2)).containsExactly(1L, 2L).inOrder()
+        assertThat(favoriteCreatedAt(2, 2)).isEqualTo(3000L)
+        assertThat(favoriteCreatedAt(1, 1)).isNull()
+    }
+
+    @Test fun version17BackupWithoutFavoritesIsRestoredWithNoFavorites() = runTest {
+        seed()
+        db.exerciseDao().insert(Exercise(2, "Squat", "Legs"))
+        val activity = ActivityRepository(db, clock = AndroidActivityClock(context))
+        val plank = activity.upsertDefinition(ActivityDefinitionInput("plank", "Plank", ActivityKind.DURATION), 2)
+        activity.saveEntry(plank, ActivityEntryInput(20000, durationSeconds = 18, clientToken = "recorded"), 2)
+        manager.writeArchive(archive)
+        val content = entries(archive)
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        // A schema 7 document (app 1.7–1.10) has every current table except favorites.
+        val v7Tables = document["tables"]!!.jsonObject.filterKeys { it != "favorite_exercises" }
+        val v7 = JsonObject(document + mapOf("schemaVersion" to JsonPrimitive(7), "tables" to JsonObject(v7Tables)))
+        // The current diary's favorites must not leak into the restored one.
+        db.exerciseDao().insertFavorite(FavoriteExercise(1, 2, 1000))
+        db.exerciseDao().insertFavorite(FavoriteExercise(2, 1, 2000))
+
+        val preview = manager.inspectArchive(ByteArrayInputStream(zip(content + ("diary.json" to v7.toString().toByteArray()))))
+        assertThat(preview.profiles).isEqualTo(2)
+        assertThat(preview.activities).isEqualTo(1)
+        manager.restoreBackup(preview)
+        assertThat(db.exerciseDao().getFavoriteIds(1)).isEmpty()
+        assertThat(db.exerciseDao().getFavoriteIds(2)).isEmpty()
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
+        assertThat(db.workoutDao().plannedExerciseIds(1)).containsExactly(1L)
+        assertThat(activity.getAllEntries(2).single().durationSeconds).isEqualTo(18L)
+        assertThat(db.exerciseDao().getById(2)!!.name).isEqualTo("Squat")
+
+        // Fail closed: a schema 7 document must carry exactly schema 7 tables.
+        val mixed = JsonObject(document + ("schemaVersion" to JsonPrimitive(7)))
+        assertThat(runCatching {
+            manager.inspectArchive(ByteArrayInputStream(zip(content + ("diary.json" to mixed.toString().toByteArray()))))
+        }.exceptionOrNull()?.message).isEqualTo("Неполный набор таблиц старой копии")
+    }
+
+    @Test fun favoriteWithMissingExerciseOrProfileIsRejectedBeforeRestore() = runTest {
+        seed()
+        db.exerciseDao().insertFavorite(FavoriteExercise(2, 1, 1000))
+        manager.writeArchive(archive)
+        val content = entries(archive)
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        val cases = listOf(
+            listOf(favoriteRow(2, 999, 1000)) to "Избранное ссылается на отсутствующее упражнение",
+            listOf(favoriteRow(999, 1, 1000)) to "Запись без профиля",
+            listOf(favoriteRow(0, 1, 1000)) to "Некорректный профиль",
+            listOf(favoriteRow(2, 1, 1000), favoriteRow(2, 1, 2000)) to "Повторяющееся избранное упражнение",
+            listOf(favoriteRow(2, 1, -1)) to "Некорректное время добавления в избранное",
+            listOf(JsonObject(favoriteRow(2, 1, 1000) + ("id" to JsonPrimitive(1)))) to "Структура записи не соответствует версии приложения",
+        )
+        for ((rows, message) in cases) {
+            val tables = document["tables"]!!.jsonObject.toMutableMap()
+            tables["favorite_exercises"] = JsonArray(rows)
+            val altered = JsonObject(document + ("tables" to JsonObject(tables)))
+            val error = runCatching {
+                manager.inspectArchive(ByteArrayInputStream(zip(content + ("diary.json" to altered.toString().toByteArray()))))
+            }.exceptionOrNull()
+            assertThat(error?.message).isEqualTo(message)
+        }
+        assertThat(db.exerciseDao().getFavoriteIds(2)).containsExactly(1L)
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
     }
 }

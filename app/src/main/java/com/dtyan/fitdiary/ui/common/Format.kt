@@ -59,4 +59,21 @@ object Format {
     fun dateFull(date: LocalDate): String = date.format(DATE_FULL)
     fun dateWithDayOfWeek(date: LocalDate): String =
         date.format(DATE_WITH_DOW).replaceFirstChar { it.titlecase(RU) }
+
+    /** Русские формы множественного числа: plural(3, «подход», «подхода», «подходов»). */
+    fun plural(n: Long, one: String, few: String, many: String): String {
+        val mod10 = n % 10
+        val mod100 = n % 100
+        return when {
+            mod100 in 11..14 -> many
+            mod10 == 1L -> one
+            mod10 in 2..4 -> few
+            else -> many
+        }
+    }
+
+    fun plural(n: Int, one: String, few: String, many: String): String = plural(n.toLong(), one, few, many)
+
+    /** «1 850» — разряды через пробел, как принято в русской типографике. */
+    fun kcal(value: Int): String = String.format(RU, "%,d", value)
 }

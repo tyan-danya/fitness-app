@@ -19,7 +19,7 @@ import java.time.ZoneId
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Тесты миграций 1→2, 2→3 и 3→4.
+ * Тесты миграций 1→2 … 7→8 (каждый Room-тест доводит файл до текущей версии 8).
  *
  * MigrationTestHelper под Robolectric не работает: AGP не кладёт assets
  * test-sourceSet-а в android_merged_assets / apk-for-local-test, поэтому
@@ -202,7 +202,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries()
             .build()
         try {
@@ -312,7 +312,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries()
             .build()
         try {
@@ -362,7 +362,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries()
             .build()
         try {
@@ -394,7 +394,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries().build()
         try {
             assertThat(db.athleteDao().getById(1)!!.name).isEqualTo("Я")
@@ -425,7 +425,7 @@ class MigrationTest {
         old.version = 3
         openHelpers.removeAt(openHelpers.lastIndex).close()
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7)
+            .addMigrations(AppDatabase.MIGRATION_3_4, AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8)
             .allowMainThreadQueries().build()
         try {
             assertThat(db.athleteDao().getActiveOnce().single().id).isEqualTo(1L)
@@ -451,7 +451,7 @@ class MigrationTest {
         openHelpers.removeAt(openHelpers.lastIndex).close()
 
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).allowMainThreadQueries().build()
+            .addMigrations(AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8).allowMainThreadQueries().build()
         try {
             // Opening via Room also checks every column, index and foreign key in schema 6.
             val plan = db.workoutDao().observePlan(2).first()
@@ -493,7 +493,7 @@ class MigrationTest {
         old.version = 6
         openHelpers.removeAt(openHelpers.lastIndex).close()
         val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
-            .addMigrations(AppDatabase.MIGRATION_6_7).allowMainThreadQueries().build()
+            .addMigrations(AppDatabase.MIGRATION_6_7, AppDatabase.MIGRATION_7_8).allowMainThreadQueries().build()
         try {
             // Real Room validates schema 7, including composite foreign keys and uniqueness.
             assertThat(db.templateDao().getById(1, 2)!!.name).isEqualTo("Сохранённый план")
@@ -518,6 +518,90 @@ class MigrationTest {
             assertThat(db.activityDao().getAllEntries(1)).isEmpty()
             assertThat(db.workoutDao().getAllFinishedOnce(1)).hasSize(1)
             assertThat(db.workoutDao().getAllFinishedOnce(2)).isEmpty()
+        } finally { db.close() }
+    }
+
+    // ---------- 7 → 8: личное избранное ----------
+
+    /** Схема v7 настоящими миграциями 1→7 поверх v1-файла; второй профиль с программой и активностью. */
+    private fun createV7DatabaseWithData(): SupportSQLiteDatabase {
+        val old = createV1DatabaseWithData()
+        listOf(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3, AppDatabase.MIGRATION_3_4,
+            AppDatabase.MIGRATION_4_5, AppDatabase.MIGRATION_5_6, AppDatabase.MIGRATION_6_7).forEach { it.migrate(old) }
+        old.execSQL("INSERT INTO athletes(id, name, isArchived) VALUES(2, 'Друг', 0)")
+        old.execSQL("INSERT INTO workout_templates(id, athleteId, name) VALUES(1, 2, 'План друга')")
+        old.execSQL("INSERT INTO template_exercises(templateId, exerciseId, position, targetSets) VALUES(1, 2, 1, 4)")
+        old.execSQL("""INSERT INTO activity_definitions(id, athleteId, `key`, name, kind, goalMetric, goalsJson, instructions)
+            VALUES(1, 2, 'plank', 'Планка', 'DURATION', 'DURATION_SECONDS', '[10,20]', '')""")
+        return old
+    }
+
+    @Test
+    fun migrate7to8_createsFavoritesTable_withCompositeKeyIndexAndForeignKeys() {
+        val db = createV7DatabaseWithData()
+        assertThat(db.tableInfo("favorite_exercises")).isEmpty()
+
+        AppDatabase.MIGRATION_7_8.migrate(db)
+
+        val columns = db.tableInfo("favorite_exercises")
+        assertThat(columns.keys).containsExactly("athleteId", "exerciseId", "createdAt")
+        columns.values.forEach {
+            assertThat(it.type).isEqualTo("INTEGER")
+            assertThat(it.notNull).isTrue()
+            assertThat(it.default).isNull()
+        }
+        // Составной первичный ключ (athleteId, exerciseId) — именно в этом порядке.
+        db.query("PRAGMA table_info(`favorite_exercises`)").use { c ->
+            val pk = buildMap { while (c.moveToNext()) put(c.getString(c.getColumnIndexOrThrow("name")), c.getInt(c.getColumnIndexOrThrow("pk"))) }
+            assertThat(pk).containsExactly("athleteId", 1, "exerciseId", 2, "createdAt", 0)
+        }
+        db.query("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'favorite_exercises' AND sql IS NOT NULL").use { c ->
+            val names = buildList { while (c.moveToNext()) add(c.getString(0)) }
+            assertThat(names).containsExactly("index_favorite_exercises_exerciseId")
+        }
+        db.query("PRAGMA foreign_key_list(`favorite_exercises`)").use { c ->
+            val references = buildSet {
+                while (c.moveToNext()) add(Triple(c.getString(c.getColumnIndexOrThrow("table")),
+                    c.getString(c.getColumnIndexOrThrow("from")), c.getString(c.getColumnIndexOrThrow("on_delete"))))
+            }
+            assertThat(references).containsExactly(Triple("athletes", "athleteId", "NO ACTION"), Triple("exercises", "exerciseId", "NO ACTION"))
+        }
+        // Старые данные целы, избранного пока нет ни у кого.
+        db.query("SELECT COUNT(*) FROM favorite_exercises").use { c -> c.moveToFirst(); assertThat(c.getInt(0)).isEqualTo(0) }
+        db.query("SELECT COUNT(*) FROM workout_sets").use { c -> c.moveToFirst(); assertThat(c.getInt(0)).isEqualTo(1) }
+        db.query("SELECT COUNT(*) FROM activity_definitions").use { c -> c.moveToFirst(); assertThat(c.getInt(0)).isEqualTo(1) }
+    }
+
+    @Test
+    fun roomOpens_v7File_keepsDiaryAndAddsEmptyPerProfileFavorites() = runTest {
+        val old = createV7DatabaseWithData()
+        old.version = 7
+        openHelpers.removeAt(openHelpers.lastIndex).close()
+
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, TEST_DB)
+            .addMigrations(AppDatabase.MIGRATION_7_8).allowMainThreadQueries().build()
+        try {
+            // Room сверяет схему 8 целиком (колонки, ключ, индекс, внешние ключи) — иначе открытие упадёт.
+            assertThat(db.workoutSetDao().getForWorkoutOnce(1).single().weightKg).isEqualTo(100.0)
+            assertThat(db.mealDao().getForDayOnce(20000).single().name).isEqualTo("Курица")
+            assertThat(db.templateDao().getItems(1).single().targetSets).isEqualTo(4)
+            assertThat(db.activityDao().getAllDefinitions(2).single().key).isEqualTo("plank")
+            assertThat(db.exerciseDao().getFavoriteIds(1)).isEmpty()
+            assertThat(db.exerciseDao().getFavoriteIds(2)).isEmpty()
+
+            db.exerciseDao().insertFavorite(FavoriteExercise(athleteId = 1, exerciseId = 2, createdAt = 20))
+            db.exerciseDao().insertFavorite(FavoriteExercise(athleteId = 1, exerciseId = 1, createdAt = 10))
+            db.exerciseDao().insertFavorite(FavoriteExercise(athleteId = 2, exerciseId = 3, createdAt = 30))
+            // Повтор игнорируется и не сдвигает время добавления.
+            db.exerciseDao().insertFavorite(FavoriteExercise(athleteId = 1, exerciseId = 2, createdAt = 99))
+            assertThat(db.exerciseDao().getFavoriteIds(1)).containsExactly(1L, 2L).inOrder()
+            assertThat(db.exerciseDao().observeFavoriteIds(2).first()).containsExactly(3L)
+            // Внешние ключи включены: нельзя отметить несуществующее упражнение или профиль.
+            assertThat(runCatching { db.exerciseDao().insertFavorite(FavoriteExercise(1, 999, 40)) }.isFailure).isTrue()
+            assertThat(runCatching { db.exerciseDao().insertFavorite(FavoriteExercise(999, 1, 40)) }.isFailure).isTrue()
+            db.exerciseDao().deleteFavorite(athleteId = 1, exerciseId = 2)
+            assertThat(db.exerciseDao().getFavoriteIds(1)).containsExactly(1L)
+            assertThat(db.exerciseDao().getFavoriteIds(2)).containsExactly(3L)
         } finally { db.close() }
     }
 }

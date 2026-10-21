@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
@@ -18,6 +21,10 @@ import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.export.PlanBundlePreview
 import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.IconBadge
+import com.dtyan.fitdiary.ui.common.sectionColors
 import java.time.LocalDate
 
 @Composable
@@ -27,20 +34,31 @@ internal fun PlanContents(plan: PlanBundlePreview, preview: Boolean = false) {
     val today = plan.week.first { it.dayOfWeek == LocalDate.now().dayOfWeek.value }
     val links = LocalUriHandler.current
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(plan.name, style = MaterialTheme.typography.titleLarge)
-        Text("${plan.templates.size} силовых программ · ${plan.activities.size} видов активности",
-            style = MaterialTheme.typography.bodySmall)
-        if (!preview) {
-            Text("Сегодня · ${days[today.dayOfWeek - 1]}", style = MaterialTheme.typography.titleMedium)
-            Text("Утро: ${today.morning}")
-            Text("Силовая: ${today.strength}")
-            Text("Дома: ${today.home}")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconBadge(Icons.Rounded.CalendarMonth)
+            Column(Modifier.weight(1f)) {
+                Text(plan.name, style = MaterialTheme.typography.titleMedium)
+                Text("${plan.templates.size} силовых программ · ${plan.activities.size} видов активности",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Свернуть план" else "Вся неделя и рекомендации") }
+        if (!preview) {
+            val colors = sectionColors()
+            Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = colors.container, contentColor = colors.onContainer) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Сегодня · ${days[today.dayOfWeek - 1]}", style = MaterialTheme.typography.titleSmall)
+                    Text("Утро: ${today.morning}")
+                    Text("Силовая: ${today.strength}")
+                    Text("Дома: ${today.home}")
+                }
+            }
+        }
+        FitButton(if (expanded) "Свернуть план" else "Вся неделя и рекомендации", { expanded = !expanded },
+            kind = FitButtonKind.Plain, compact = true, icon = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore)
         if (expanded) {
             Text(plan.overview)
             plan.week.forEach { day ->
-                Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, tonalElevation = 1.dp) {
+                Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(days[day.dayOfWeek - 1], style = MaterialTheme.typography.titleMedium)
                         Text("Утро: ${day.morning}")
@@ -76,7 +94,7 @@ internal fun PlanContents(plan: PlanBundlePreview, preview: Boolean = false) {
                 }
             }
             plan.sources.forEach { source ->
-                TextButton(onClick = { runCatching { links.openUri(source.url) } }) { Text(source.title) }
+                FitButton(source.title, { runCatching { links.openUri(source.url) } }, kind = FitButtonKind.Plain, compact = true)
             }
         }
     }

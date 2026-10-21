@@ -10,15 +10,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
+import androidx.compose.material.icons.automirrored.rounded.ListAlt
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Unarchive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -38,8 +46,24 @@ import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.ActivityProgression
 import com.dtyan.fitdiary.domain.DailyPushUps
 import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.ActionTile
+import com.dtyan.fitdiary.ui.common.BlockTitle
+import com.dtyan.fitdiary.ui.common.DaySwitcher
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
+import com.dtyan.fitdiary.ui.common.IconBadge
+import com.dtyan.fitdiary.ui.common.MenuAction
+import com.dtyan.fitdiary.ui.common.NavRow
+import com.dtyan.fitdiary.ui.common.OverflowMenu
+import com.dtyan.fitdiary.ui.common.StatusPill
+import com.dtyan.fitdiary.ui.common.TileGrid
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -47,7 +71,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
 @Composable
-fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
+fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     val owner = remember { container.profiles.activeId.value }
     val vm: ActivityViewModel = viewModel(key = "daily_activity_$owner") {
@@ -101,9 +125,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     }
     Scaffold(
         modifier = Modifier.imePadding(), contentWindowInsets = WindowInsets(0.dp),
-        topBar = { TopAppBar(title = { Text(title) }, windowInsets = WindowInsets(0.dp), navigationIcon = {
-            IconButton(onClick = ::back, enabled = !busy) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Назад") }
-        }) },
+        topBar = { DetailTopBar(title = title, subtitle = ownerName, onBack = ::back, backEnabled = !busy) },
         bottomBar = {
             if (editor != null || error != null || message != null || busy) Surface(shadowElevation = 4.dp) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -112,12 +134,11 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                     if (feedback != null) Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(feedback, color = if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite })
-                        TextButton(onClick = { vm.clearError(); vm.clearMessage() }) { Text("ОК") }
+                        FitButton("ОК", { vm.clearError(); vm.clearMessage() }, kind = FitButtonKind.Plain, compact = true)
                     }
-                    if (editor != null) Button(onClick = vm::saveEntry, enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                        Text(if (busy) "Сохраняем…" else "Сохранить · $ownerName")
-                    } else if (busy) Text("Подождите…", style = MaterialTheme.typography.bodySmall)
+                    if (editor != null) FitButton(if (busy) "Сохраняем…" else "Сохранить · $ownerName", vm::saveEntry,
+                        Modifier.fillMaxWidth(), enabled = !busy)
+                    else if (busy) Text("Подождите…", style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -132,17 +153,22 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
             history != null -> LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("activity-history"),
                 contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item("header") {
-                    Text(history.name, style = MaterialTheme.typography.headlineSmall)
-                    Text("Профиль: $ownerName", style = MaterialTheme.typography.bodySmall)
-                    ActivityProgressCard(history, state.allEntries)
+                    FitCard {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ExerciseGuideThumb(ExerciseGuides.forActivity(history), displayName = history.name)
+                            Text(history.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                        }
+                        ActivityProgressCard(history, state.allEntries)
+                    }
                 }
                 val groups = state.allEntries.filter { it.activityId == history.id }.groupBy { it.epochDay }.toSortedMap(reverseOrder())
                 if (groups.isEmpty()) item("empty") { Text("Записей пока нет. Каждый подход или прогулка появится здесь после сохранения.") }
                 groups.forEach { (day, entries) ->
                     item("day_$day") {
-                        Text(Format.dateFull(LocalDate.ofEpochDay(day)), style = MaterialTheme.typography.titleMedium)
                         val best = ActivityProgression.calculate(history, entries).bestValue
-                        best?.let { Text("Лучшее за день: ${activityValue(it, history.goalMetric, history.kind)}", style = MaterialTheme.typography.bodySmall) }
+                        BlockTitle(Format.dateFull(LocalDate.ofEpochDay(day)), action = best?.let { value ->
+                            { StatusPill("Лучшее: ${activityValue(value, history.goalMetric, history.kind)}") }
+                        })
                     }
                     items(entries.sortedByDescending { it.timestamp }, key = { "entry_${it.id}" }) { entry ->
                         ActivityLogCard(entry, history, busy, onEdit = { vm.editEntry(entry) }, onDelete = { deleteId = entry.id })
@@ -152,30 +178,39 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("activity-day-list"),
                 contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 item("date") {
-                    Text("Профиль: $ownerName", style = MaterialTheme.typography.titleSmall)
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { vm.selectDay(state.epochDay - 1) }, enabled = !busy) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Предыдущий день")
-                        }
-                        TextButton(onClick = { showDate = true }, enabled = !busy, modifier = Modifier.weight(1f)) {
-                            Text(Format.dateFull(LocalDate.ofEpochDay(state.epochDay)))
-                        }
-                        IconButton(onClick = { vm.selectDay(state.epochDay + 1) }, enabled = !busy && state.epochDay < state.todayEpochDay) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Следующий день")
-                        }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DaySwitcher(
+                            label = if (state.epochDay == state.todayEpochDay) "Сегодня" else Format.dateFull(LocalDate.ofEpochDay(state.epochDay)),
+                            onPrevious = { vm.selectDay(state.epochDay - 1) },
+                            onNext = { vm.selectDay(state.epochDay + 1) },
+                            onLabelClick = { showDate = true },
+                            nextEnabled = state.epochDay < state.todayEpochDay,
+                            enabled = !busy,
+                            labelClickDescription = "Выбрать дату",
+                        )
+                        if (state.epochDay != state.todayEpochDay) FitButton("Вернуться к сегодня", { vm.selectDay(state.todayEpochDay) },
+                            Modifier.align(Alignment.CenterHorizontally), kind = FitButtonKind.Plain, compact = true)
                     }
-                    if (state.epochDay != state.todayEpochDay) TextButton(onClick = { vm.selectDay(state.todayEpochDay) }) { Text("Сегодня") }
                 }
                 item("summary") {
                     val summary = state.summary
-                    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Итог за день", style = MaterialTheme.typography.titleMedium)
-                            Text("Ходьба: ${activityNumber(summary.distanceKm)} км · ${summary.steps} шагов")
-                            Text("Время ходьбы: ${activityNumber(summary.walkingSeconds / 60.0)} мин")
-                            Text("Упражнения: ${summary.sets} подходов · ${summary.reps} повторов · ${summary.exerciseSeconds} сек")
-                            Text("Только сохранённые здесь записи. Тренировки в зале считаются отдельно.", style = MaterialTheme.typography.bodySmall)
+                    FitCard {
+                        Text("Итог за день", style = MaterialTheme.typography.titleMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconBadge(Icons.AutoMirrored.Rounded.DirectionsWalk, size = 36.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text("Ходьба: ${activityNumber(summary.distanceKm)} км · ${summary.steps} шагов", style = MaterialTheme.typography.titleSmall)
+                                Text("Время ходьбы: ${activityNumber(summary.walkingSeconds / 60.0)} мин", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            IconBadge(Icons.Rounded.FitnessCenter, size = 36.dp)
+                            Text("Упражнения: ${summary.sets} подходов · ${summary.reps} повторов · ${summary.exerciseSeconds} сек",
+                                style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        }
+                        Text("Только сохранённые здесь записи. Тренировки в зале считаются отдельно.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 item("daily_pushups") {
@@ -184,33 +219,50 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                         onEditGoal = { vm.clearError(); vm.clearMessage(); showDailyGoal = true }, streak = state.pushUpStreak)
                 }
                 item("quick") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        state.definitions.firstOrNull { !it.isArchived && it.key == "walking" }?.let { walking ->
-                            Button(onClick = { vm.newEntry(walking.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Записать ходьбу") }
+                    val walking = state.definitions.firstOrNull { !it.isArchived && it.key == "walking" }
+                    val plank = state.definitions.firstOrNull { !it.isArchived && it.key == "plank" }
+                    val tiles = buildList<@Composable (Modifier) -> Unit> {
+                        if (walking != null) add { m ->
+                            ActionTile("Записать ходьбу", Icons.AutoMirrored.Rounded.DirectionsWalk, { vm.newEntry(walking.id) }, m,
+                                subtitle = "Км, шаги, время", enabled = !busy)
                         }
-                        state.definitions.firstOrNull { !it.isArchived && it.key == "plank" }?.let { plank ->
-                            OutlinedButton(onClick = { vm.openTimer(plank.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Планка · секундомер") }
+                        if (plank != null) add { m ->
+                            ActionTile("Планка · секундомер", Icons.Rounded.Timer, { vm.openTimer(plank.id) }, m,
+                                subtitle = "Время удержания", enabled = !busy)
                         }
-                        OutlinedButton(onClick = { chooseSet = true }, enabled = !busy && state.definitions.any { !it.isArchived && it.kind == ActivityKind.REPS },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Другие упражнения") }
-                        onOpenPrograms?.let { TextButton(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Мои программы и расписание") } }
+                        add { m ->
+                            ActionTile("Другие упражнения", Icons.Rounded.FitnessCenter, { chooseSet = true }, m,
+                                subtitle = "Один подход за раз",
+                                enabled = !busy && state.definitions.any { !it.isArchived && it.kind == ActivityKind.REPS })
+                        }
+                    }
+                    TileGrid(tiles)
+                }
+                onOpenPrograms?.let { open ->
+                    item("programs") {
+                        FitCard(contentPadding = PaddingValues(8.dp)) {
+                            NavRow("Мои программы и расписание", Icons.AutoMirrored.Rounded.ListAlt, onClick = open,
+                                subtitle = "План недели, силовые программы и цели")
+                        }
                     }
                 }
                 if (state.timers.isNotEmpty()) item("pending_timers") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Незавершённые секундомеры", style = MaterialTheme.typography.titleMedium)
+                    FitCard(contentPadding = PaddingValues(8.dp), spacing = 0.dp) {
+                        Text("Незавершённые секундомеры", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(8.dp))
                         state.timers.forEach { timer ->
                             val name = state.definitions.firstOrNull { it.id == timer.activityId }?.name ?: "Упражнение"
-                            OutlinedButton(onClick = { vm.openTimer(timer.activityId) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                                Text("$name · ${if (timer.durationSeconds == null) "идёт" else "ожидает сохранения"}")
-                            }
+                            NavRow(name, Icons.Rounded.Timer, onClick = { vm.openTimer(timer.activityId) }, enabled = !busy,
+                                subtitle = if (timer.durationSeconds == null) "Идёт отсчёт" else "Ожидает сохранения")
                         }
                     }
                 }
                 item("definitions_title") {
-                    Text("Упражнения и цели", style = MaterialTheme.typography.titleLarge)
-                    Text("Каждый вариант — отдельная история. Ступени — ваши ориентиры: достигнутые отмечаются автоматически по одному чистому подходу или одной прогулке.", style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { createDefinition = true }, enabled = !busy) { Text("Добавить свою активность") }
+                    BlockTitle("Упражнения и цели", action = {
+                        FitButton("Добавить", { createDefinition = true }, kind = FitButtonKind.Plain, compact = true,
+                            icon = Icons.Rounded.Add, enabled = !busy)
+                    })
+                    Text("Каждый вариант — отдельная история. Ступени — ваши ориентиры: достигнутые отмечаются автоматически по одному чистому подходу или одной прогулке.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 items(state.definitions.filter { !it.isArchived || showArchived }.sortedBy { it.sortOrder }, key = { "definition_${it.id}" }) { definition ->
                     ActivityDefinitionCard(definition, state.allEntries, busy, onRecord = { vm.newEntry(definition.id) },
@@ -221,10 +273,14 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                         })
                 }
                 if (state.definitions.any { it.isArchived }) item("archives") {
-                    TextButton(onClick = { showArchived = !showArchived }) { Text(if (showArchived) "Скрыть архив" else "Показать архив активностей") }
+                    FitButton(if (showArchived) "Скрыть архив" else "Показать архив активностей", { showArchived = !showArchived },
+                        kind = FitButtonKind.Plain, compact = true)
                 }
-                item("day_entries") { Text("Записи за выбранный день", style = MaterialTheme.typography.titleLarge) }
-                if (state.dayEntries.isEmpty()) item("empty_day") { Text("За этот день записей пока нет. Начните с прогулки или одного подхода — сохранится только введённый результат.") }
+                item("day_entries") { BlockTitle("Записи за выбранный день") }
+                if (state.dayEntries.isEmpty()) item("empty_day") {
+                    Text("За этот день записей пока нет. Начните с прогулки или одного подхода — сохранится только введённый результат.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 items(state.dayEntries, key = { "day_entry_${it.id}" }) { entry ->
                     state.definitions.firstOrNull { it.id == entry.activityId }?.let { definition ->
                         ActivityLogCard(entry, definition, busy, onEdit = { vm.editEntry(entry) }, onDelete = { deleteId = entry.id })
@@ -253,7 +309,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 activePushUps.forEach { activity ->
-                    TextButton(onClick = { choosePushUps = false; vm.newEntry(activity.id) }, modifier = Modifier.fillMaxWidth()) { Text(activity.name) }
+                    ActivityChoiceRow(activity) { choosePushUps = false; vm.newEntry(activity.id) }
                 }
             }
         }, confirmButton = { TextButton(onClick = { choosePushUps = false }) { Text("Закрыть") } })
@@ -268,7 +324,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     if (chooseSet) AlertDialog(onDismissRequest = { chooseSet = false }, title = { Text("Какой подход записать?") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             state.definitions.filter { !it.isArchived && it.kind == ActivityKind.REPS }.forEach { activity ->
-                TextButton(onClick = { chooseSet = false; vm.newEntry(activity.id) }, modifier = Modifier.fillMaxWidth()) { Text(activity.name) }
+                ActivityChoiceRow(activity) { chooseSet = false; vm.newEntry(activity.id) }
             }
         }
     }, confirmButton = { TextButton(onClick = { chooseSet = false }) { Text("Закрыть") } })
@@ -276,7 +332,9 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
         AlertDialog(onDismissRequest = { if (!busy) deleteId = null }, title = { Text("Удалить запись?") },
             text = { Column { Text("Удалится только этот результат за ${Format.dateFull(LocalDate.ofEpochDay(entry.epochDay))}.")
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) } } },
-            confirmButton = { TextButton(enabled = !busy, onClick = { vm.deleteEntry(entry) { deleteId = null } }) { Text("Удалить") } },
+            confirmButton = { TextButton(enabled = !busy, onClick = { vm.deleteEntry(entry) { deleteId = null } }) {
+                Text("Удалить", color = MaterialTheme.colorScheme.error)
+            } },
             dismissButton = { TextButton(enabled = !busy, onClick = { deleteId = null }) { Text("Отмена") } })
     } }
     archiveId?.let { id -> state.definitions.firstOrNull { it.id == id }?.let { definition ->
@@ -295,7 +353,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
 @Composable
 internal fun ActivityProgressCard(definition: ActivityDefinition, entries: List<ActivityEntry>) {
     val progress = ActivityProgression.calculate(definition, entries.filter { it.activityId == definition.id })
-    Column(Modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(progress.bestValue?.let { "Лучший результат: ${activityValue(it, definition.goalMetric, definition.kind)}" } ?: "Пока нет результата для цели")
         if (definition.goals.isEmpty()) Text("Цель пока не задана. Можно настроить свою лестницу.", style = MaterialTheme.typography.bodySmall)
         else if (progress.allGoalsReached) Text("Все ${definition.goals.size} ступени достигнуты", color = MaterialTheme.colorScheme.primary)
@@ -313,49 +371,71 @@ internal fun ActivityProgressCard(definition: ActivityDefinition, entries: List<
 private fun ActivityDefinitionCard(definition: ActivityDefinition, entries: List<ActivityEntry>, busy: Boolean,
     onRecord: () -> Unit, onTimer: () -> Unit, onGoals: () -> Unit, onHistory: () -> Unit, onEdit: () -> Unit, onArchive: () -> Unit,
     onRestore: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.large, tonalElevation = 1.dp) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                ExerciseGuideThumb(ExerciseGuides.forActivity(definition), displayName = definition.name)
-                Text(definition.name + if (definition.isArchived) " · архив" else "", style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f))
+    FitCard {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ExerciseGuideThumb(ExerciseGuides.forActivity(definition), displayName = definition.name)
+            Column(Modifier.weight(1f)) {
+                Text(definition.name, style = MaterialTheme.typography.titleMedium)
+                if (definition.isArchived) Text("В архиве", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (definition.instructions.isNotBlank()) Text(definition.instructions, style = MaterialTheme.typography.bodySmall)
-            definition.weeklyScheduleNote?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            ActivityProgressCard(definition, entries)
-            if (!definition.isArchived) Button(onClick = onRecord, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Записать результат") }
-            if (definition.kind == ActivityKind.DURATION && !definition.isArchived) OutlinedButton(onClick = onTimer, enabled = !busy,
-                modifier = Modifier.fillMaxWidth()) { Text("Открыть секундомер") }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onHistory, enabled = !busy) { Text("История") }
-                if (definition.isArchived) TextButton(onClick = onRestore, enabled = !busy) { Text("Вернуть") }
-                if (!definition.isArchived) {
-                    TextButton(onClick = onGoals, enabled = !busy) { Text("Лестница целей") }
-                    TextButton(onClick = onEdit, enabled = !busy) { Text("Настроить") }
-                    TextButton(onClick = onArchive, enabled = !busy) { Text("Скрыть") }
+            OverflowMenu(buildList {
+                add(MenuAction("История", Icons.Rounded.History, onClick = onHistory))
+                if (definition.isArchived) add(MenuAction("Вернуть из архива", Icons.Rounded.Unarchive, onClick = onRestore))
+                else {
+                    add(MenuAction("Лестница целей", Icons.Rounded.Flag, onClick = onGoals))
+                    add(MenuAction("Настроить", Icons.Rounded.Edit, onClick = onEdit))
+                    add(MenuAction("Скрыть в архив", Icons.Rounded.Archive, onClick = onArchive))
                 }
-            }
+            }, contentDescription = "Действия: ${definition.name}", enabled = !busy)
         }
+        if (definition.instructions.isNotBlank()) Text(definition.instructions, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        definition.weeklyScheduleNote?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        ActivityProgressCard(definition, entries)
+        if (!definition.isArchived) {
+            if (definition.kind == ActivityKind.DURATION) FitButtonRow(
+                first = { m -> FitButton("Записать результат", onRecord, m, kind = FitButtonKind.Tonal, enabled = !busy) },
+                second = { m -> FitButton("Секундомер", onTimer, m, kind = FitButtonKind.Outlined, icon = Icons.Rounded.Timer, enabled = !busy) },
+            ) else FitButton("Записать результат", onRecord, Modifier.fillMaxWidth(), kind = FitButtonKind.Tonal, enabled = !busy)
+        }
+    }
+}
+
+/** Строка выбора активности в диалоге: схема упражнения и название. */
+@Composable
+private fun ActivityChoiceRow(activity: ActivityDefinition, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(MaterialTheme.shapes.small).clickable(onClick = onClick).padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        ExerciseGuideThumb(ExerciseGuides.forActivity(activity), size = 44.dp, displayName = activity.name)
+        Text(activity.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun ActivityLogCard(entry: ActivityEntry, definition: ActivityDefinition, busy: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 1.dp) {
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(definition.name, style = MaterialTheme.typography.titleMedium)
+    FitCard(shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(start = 14.dp, top = 12.dp, end = 4.dp, bottom = 8.dp), spacing = 4.dp) {
+        Row(verticalAlignment = Alignment.Top) {
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(definition.name, style = MaterialTheme.typography.titleSmall)
             Text(entryDescription(entry, definition.kind), style = MaterialTheme.typography.titleLarge)
-            Text("Записано в ${Format.time(entry.timestamp)}", style = MaterialTheme.typography.bodySmall)
+            Text("Записано в ${Format.time(entry.timestamp)}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (definition.kind != ActivityKind.WALK && !entry.isClean) Text("С поправкой на технику · не повышает цель", style = MaterialTheme.typography.bodySmall)
             if (definition.kind == ActivityKind.WALK) listOfNotNull(entry.speedKmh?.let { "Скорость: ${activityNumber(it)} км/ч" },
                 entry.inclinePercent?.let { "Наклон: ${activityNumber(it)}%" }).takeIf { it.isNotEmpty() }?.let {
                 Text(it.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
             }
             entry.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-            Row {
-                IconButton(onClick = onEdit, enabled = !busy) { Icon(Icons.Filled.Edit, "Изменить запись: ${definition.name}") }
-                IconButton(onClick = onDelete, enabled = !busy) { Icon(Icons.Filled.Delete, "Удалить запись: ${definition.name}") }
+          }
+          Row {
+            IconButton(onClick = onEdit, enabled = !busy) {
+                Icon(Icons.Rounded.Edit, "Изменить запись: ${definition.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            IconButton(onClick = onDelete, enabled = !busy) {
+                Icon(Icons.Rounded.Delete, "Удалить запись: ${definition.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+          }
         }
     }
 }

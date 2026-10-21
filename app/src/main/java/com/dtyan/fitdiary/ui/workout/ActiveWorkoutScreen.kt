@@ -8,24 +8,42 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bookmarks
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.FitDimens
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
+import com.dtyan.fitdiary.ui.common.MenuAction
+import com.dtyan.fitdiary.ui.common.OverflowMenu
+import com.dtyan.fitdiary.ui.common.StatusPill
+import com.dtyan.fitdiary.ui.common.sectionColors
 
 @Composable
 fun ActiveWorkoutScreen(
@@ -34,7 +52,7 @@ fun ActiveWorkoutScreen(
     onOpenExercise: (Long, Long) -> Unit,
     onWorkoutClosed: () -> Unit,
     onSaveTemplate: ((Long) -> Unit)? = null,
-) {
+) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     var selectedId by rememberSaveable(workoutId) { mutableStateOf(workoutId) }
     val groupFlow = remember(selectedId) { container.workoutRepository.observeGroupWorkouts(selectedId) }
@@ -44,10 +62,10 @@ fun ActiveWorkoutScreen(
         ?: group.firstOrNull { it.endedAt == null }
     if (selected == null) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(if (group.isEmpty()) "Загружаем тренировку…" else "Тренировка завершена")
-            TextButton(onClick = onWorkoutClosed) { Text("На главную") }
+            Text(if (group.isEmpty()) "Загружаем тренировку…" else "Тренировка завершена", style = MaterialTheme.typography.titleMedium)
+            FitButton("На главную", onWorkoutClosed, kind = FitButtonKind.Outlined)
         }
-        return
+        return@FitSectionScope
     }
     ActiveAthleteWorkout(
         selected, group, athletes.associate { it.id to it.name },
@@ -64,7 +82,6 @@ fun ActiveWorkoutScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ActiveAthleteWorkout(
     selected: Workout,
@@ -97,63 +114,66 @@ private fun ActiveAthleteWorkout(
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text("Тренировка · $name") },
-                navigationIcon = { IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "На главную")
-                } },
-                actions = { IconButton(onClick = { showDelete = true }, enabled = !busy) {
-                    Icon(Icons.Filled.Delete, "Удалить тренировку: $name")
-                } },
+            DetailTopBar(
+                title = "Тренировка",
+                subtitle = "$name · начало в ${Format.time(selected.startedAt)}",
+                onBack = onBack,
+                backLabel = "На главную",
+                actions = {
+                    OverflowMenu(buildList {
+                        if (onSaveTemplate != null && groups.isNotEmpty()) add(MenuAction("Сохранить как программу", Icons.Rounded.Bookmarks, onClick = onSaveTemplate))
+                        add(MenuAction("Удалить тренировку: $name", Icons.Rounded.Delete, destructive = true) { showDelete = true })
+                    }, enabled = !busy)
+                },
             )
         },
         bottomBar = {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onAddExercise, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Icon(Icons.Filled.Add, null); Spacer(Modifier.width(8.dp)); Text("Добавить упражнение")
-                }
-                Button(onClick = {
-                    weights = emptyMap()
-                    finishAll = active.size > 1
-                    showFinish = true
-                }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text(if (busy) "Сохраняем…" else "Завершить тренировку")
-                }
+            Surface(color = MaterialTheme.colorScheme.background) {
+                FitButtonRow(Modifier.padding(FitDimens.ScreenPadding), minWidthForRow = 340.dp,
+                    first = { m -> FitButton("Добавить упражнение", onAddExercise, m, kind = FitButtonKind.Tonal, icon = Icons.Rounded.Add, enabled = !busy) },
+                    second = { m ->
+                        FitButton(if (busy) "Сохраняем…" else "Завершить тренировку", {
+                            weights = emptyMap()
+                            finishAll = active.size > 1
+                            showFinish = true
+                        }, m, enabled = !busy)
+                    })
             }
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item("participants") { ParticipantChips(participants, names, selected.id, !busy, onSelect) }
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(horizontal = FitDimens.ScreenPadding, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(FitDimens.ItemGap)) {
+            if (participants.size > 1) item("participants") { ParticipantChips(participants, names, selected.id, !busy, onSelect) }
             item("summary") {
-                Text("${sets.size} подходов · ${Format.volume(sets.sumOf { it.weightKg * it.reps })} тоннаж",
-                    style = MaterialTheme.typography.bodyMedium)
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatusPill("${sets.size} " + Format.plural(sets.size, "подход", "подхода", "подходов"))
+                    StatusPill("Тоннаж ${Format.volume(sets.sumOf { it.weightKg * it.reps })}")
+                }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
             }
             if (planned.isNotEmpty()) item("plan_progress") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("План: ${planned.count { it.completed }} из ${planned.size} упражнений выполнено",
-                        style = MaterialTheme.typography.titleMedium)
-                    if (next != null) Button(onClick = { onOpenExercise(next.exerciseId) },
-                        enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                        Text("Открыть следующее: ${next.name}")
-                    } else Text("Все упражнения отмечены. Можно завершить тренировку.")
+                val colors = sectionColors()
+                FitCard(color = colors.container, contentColor = colors.onContainer) {
+                    Text("План: ${planned.count { it.completed }} из ${planned.size}", style = MaterialTheme.typography.titleMedium)
+                    LinearProgressIndicator(
+                        progress = { planned.count { it.completed }.toFloat() / planned.size },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small),
+                        color = colors.accent, trackColor = MaterialTheme.colorScheme.surface, gapSize = 0.dp, drawStopIndicator = {},
+                    )
+                    if (next != null) FitButton("Следующее: ${next.name}", { onOpenExercise(next.exerciseId) }, Modifier.fillMaxWidth(),
+                        icon = Icons.AutoMirrored.Rounded.ArrowForward, enabled = !busy)
+                    else Text("Все упражнения отмечены. Можно завершать тренировку.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
             if (groups.isEmpty()) item("empty") {
                 Text("Добавьте первое упражнение. Каждый участник записывает свои веса и повторы.",
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 24.dp))
             }
             items(groups, key = { it.exerciseId }) { group ->
                 ExerciseGroupCard(group, !busy,
                     onToggleComplete = { vm.markComplete(group.exerciseId, !group.completed) },
                     onClick = { if (!busy) onOpenExercise(group.exerciseId) })
-            }
-            if (onSaveTemplate != null && groups.isNotEmpty()) item("save_template") {
-                OutlinedButton(onClick = onSaveTemplate, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Сохранить как программу")
-                }
             }
         }
     }
@@ -179,7 +199,9 @@ private fun ActiveAthleteWorkout(
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (active.size > 1) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+                            .clickable(enabled = !busy, role = Role.Checkbox) { finishAll = !finishAll },
+                            verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(checked = finishAll, onCheckedChange = { finishAll = it }, enabled = !busy)
                             Text("Завершить для всех (${active.size})")
                         }
@@ -204,7 +226,7 @@ private fun ActiveAthleteWorkout(
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }
             },
-            confirmButton = { Button(enabled = valid && !busy, onClick = {
+            confirmButton = { TextButton(enabled = valid && !busy, onClick = {
                 val bodyWeights = finishing.mapNotNull { participant ->
                     weights[participant.athleteId]?.replace(',', '.')?.toDoubleOrNull()?.let { participant.athleteId to it }
                 }.toMap()
@@ -216,27 +238,46 @@ private fun ActiveAthleteWorkout(
     }
 }
 
+/** «Цель: 3 подхода по 10» — ориентир программы человеческими словами. */
+internal fun planTarget(sets: Int?, reps: Int?): String? = when {
+    sets != null && reps != null -> "Цель: $sets ${Format.plural(sets, "подход", "подхода", "подходов")} по $reps"
+    sets != null -> "Цель: $sets ${Format.plural(sets, "подход", "подхода", "подходов")}"
+    reps != null -> "Цель: $reps ${Format.plural(reps, "повтор", "повтора", "повторов")}"
+    else -> null
+}
+
 @Composable
 private fun ExerciseGroupCard(group: ExerciseGroupUi, enabled: Boolean, onToggleComplete: () -> Unit, onClick: () -> Unit) {
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Открыть упражнение", onClick = onClick).padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    val colors = sectionColors()
+    FitCard(onClick = onClick, onClickLabel = "Открыть упражнение", shape = MaterialTheme.shapes.medium,
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             ExerciseGuideThumb(ExerciseGuides.resolve(group.name), group.photoPath, size = 56.dp, displayName = group.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(group.name, style = MaterialTheme.typography.titleMedium)
-                if (group.planned) Text(if (group.completed) "✓ Выполнено" else "○ По плану",
-                    style = MaterialTheme.typography.labelLarge)
-                if (group.targetSets != null || group.targetReps != null) Text(
-                    listOfNotNull(group.targetSets?.let { "Подходы: $it" }, group.targetReps?.let { "Повторы: $it" }).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall)
-                group.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                Text(if (group.sets.isEmpty()) "По плану · подходов пока нет" else
-                    group.sets.joinToString(" · ") { "${Format.weight(it.weightKg)} × ${it.reps}" },
-                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (group.planned) TextButton(onClick = onToggleComplete, enabled = enabled && (group.completed || group.sets.isNotEmpty())) {
-                    Text(if (group.completed) "Вернуть в план" else "Отметить выполненным")
+                Text(group.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                planTarget(group.targetSets, group.targetReps)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                group.note?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(if (group.sets.isEmpty()) "Подходов пока нет" else
+                    group.sets.joinToString(" · ") { "${Format.weight(it.weightKg)} × ${it.reps}" },
+                    style = MaterialTheme.typography.bodyMedium)
             }
         }
+        // Одна отметка вместо статуса и кнопки: нажатие ставит или снимает «Выполнено».
+        if (group.planned) FilterChip(
+            selected = group.completed,
+            onClick = onToggleComplete,
+            enabled = enabled && (group.completed || group.sets.isNotEmpty()),
+            label = { Text(if (group.completed) "Выполнено" else if (group.sets.isEmpty()) "По плану · запишите подход" else "Отметить выполненным") },
+            leadingIcon = {
+                Icon(if (group.completed) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                    contentDescription = null, modifier = Modifier.size(18.dp))
+            },
+            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colors.container,
+                selectedLabelColor = colors.onContainer, selectedLeadingIconColor = colors.accent),
+        )
     }
 }

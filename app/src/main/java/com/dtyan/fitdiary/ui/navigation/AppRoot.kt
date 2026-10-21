@@ -1,12 +1,11 @@
 package com.dtyan.fitdiary.ui.navigation
 
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.MonitorWeight
+import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -16,20 +15,27 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dtyan.fitdiary.appContainer
-import com.dtyan.fitdiary.ui.profile.ProfileToolbar
+import com.dtyan.fitdiary.ui.profile.AccountSheet
+import com.dtyan.fitdiary.ui.profile.ActiveProfile
+import com.dtyan.fitdiary.ui.profile.LocalActiveProfile
+import com.dtyan.fitdiary.ui.profile.AppChrome
+import com.dtyan.fitdiary.ui.profile.LocalAppChrome
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -49,7 +55,6 @@ import com.dtyan.fitdiary.ui.workout.ExerciseLogScreen
 import com.dtyan.fitdiary.ui.workout.ExercisePickerScreen
 import com.dtyan.fitdiary.ui.templates.TemplatesScreen
 import com.dtyan.fitdiary.ui.activity.ActivityScreen
-import com.dtyan.fitdiary.ui.update.UpdateBanner
 import com.dtyan.fitdiary.ui.update.UpdateDialog
 
 /** Маршруты приложения. */
@@ -74,13 +79,14 @@ object Routes {
     fun templates(sourceWorkoutId: Long? = null) = "templates?sourceWorkoutId=${sourceWorkoutId ?: 0L}"
 }
 
-private data class TabItem(val route: String, val title: String, val icon: ImageVector)
+private data class TabItem(val route: String, val title: String, val shortTitle: String, val icon: ImageVector)
 
+/** Вкладка «Тело» объединяет вес и замеры; маршрут прежний, чтобы уведомления открывали её как раньше. */
 private val TABS = listOf(
-    TabItem(Routes.HOME, "Тренировка", Icons.Filled.FitnessCenter),
-    TabItem(Routes.NUTRITION, "Питание", Icons.Filled.Restaurant),
-    TabItem(Routes.MEASUREMENTS, "Замеры", Icons.Filled.Straighten),
-    TabItem(Routes.STATS, "Статистика", Icons.Filled.Insights),
+    TabItem(Routes.HOME, "Тренировка", "Зал", Icons.Rounded.FitnessCenter),
+    TabItem(Routes.NUTRITION, "Питание", "Питание", Icons.Rounded.Restaurant),
+    TabItem(Routes.MEASUREMENTS, "Тело", "Тело", Icons.Rounded.MonitorWeight),
+    TabItem(Routes.STATS, "Статистика", "Итоги", Icons.Rounded.Insights),
 )
 
 /**
@@ -91,20 +97,30 @@ private val TABS = listOf(
 fun AppRoot(requestedTab: String? = null, requestNonce: Int = 0, updateRequestNonce: Int = 0) {
     val container = LocalContext.current.appContainer
     val athleteId by container.profiles.activeId.collectAsStateWithLifecycle()
+    val people by container.profiles.profiles.collectAsStateWithLifecycle(null)
+    val activeProfile = ActiveProfile(athleteId, people?.firstOrNull { it.id == athleteId }?.name.orEmpty())
     var dataRevision by remember { mutableIntStateOf(0) }
     var showUpdates by remember { mutableStateOf(false) }
+    var showAccount by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(updateRequestNonce) {
         if (updateRequestNonce > 0) showUpdates = true
     }
-    key(athleteId, dataRevision) {
-        ProfileNavigation(requestedTab, requestNonce, onUpdates = { showUpdates = true }, onDataRestored = { dataRevision++ })
+    val chrome = remember { AppChrome(openAccount = { showAccount = true }, openUpdates = { showUpdates = true }) }
+    CompositionLocalProvider(LocalAppChrome provides chrome, LocalActiveProfile provides activeProfile) {
+        key(athleteId, dataRevision) {
+            ProfileNavigation(requestedTab, requestNonce)
+        }
     }
+    if (showAccount) AccountSheet(
+        onDismiss = { showAccount = false },
+        onDataRestored = { dataRevision++ },
+        onOpenUpdates = { showAccount = false; showUpdates = true },
+    )
     if (showUpdates) UpdateDialog(container.updater, onDismiss = { showUpdates = false })
 }
 
 @Composable
-private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onUpdates: () -> Unit, onDataRestored: () -> Unit) {
-    val updater = LocalContext.current.appContainer.updater
+private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -121,10 +137,6 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onUpdate
     }
 
     Scaffold(
-        topBar = { if (showBottomBar) Column {
-            ProfileToolbar(onDataRestored, onUpdates = onUpdates)
-            if (currentRoute == Routes.HOME) UpdateBanner(updater, onOpen = onUpdates)
-        } },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -148,12 +160,9 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int, onUpdate
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(tab.icon, contentDescription = tab.title) },
-                            label = { Text(if (compactLabels) when (tab.route) {
-                                Routes.HOME -> "Зал"
-                                Routes.STATS -> "Итоги"
-                                else -> tab.title
-                            } else tab.title) },
+                            modifier = Modifier.testTag("tab-${tab.route}"),
+                            icon = { Icon(tab.icon, contentDescription = null) },
+                            label = { Text(if (compactLabels) tab.shortTitle else tab.title, maxLines = 1) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = accent,
                                 selectedTextColor = accent,

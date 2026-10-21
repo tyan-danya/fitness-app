@@ -8,6 +8,7 @@ import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.ui.common.Format
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -44,6 +45,12 @@ class ExerciseLogViewModel(
     val repsText = savedStateHandle.getStateFlow("reps", "")
     private val _prEvents = Channel<Unit>(Channel.BUFFERED)
     val prEvents = _prEvents.receiveAsFlow()
+
+    /** Избранное принадлежит участнику этой тренировки, а не профилю, выбранному в шапке. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val favorite: StateFlow<Boolean> = flow { workoutRepository.getWorkoutOnce(workoutId)?.athleteId?.let { emit(it) } }
+        .flatMapLatest { owner -> exerciseRepository.observeFavoriteIds(owner).map { exerciseId in it } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     init {
         viewModelScope.launch {
@@ -121,6 +128,16 @@ class ExerciseLogViewModel(
         exerciseRepository.updatePhoto(exercise, path)
         _uiState.update { it.copy(photoPath = path) }
         onSaved()
+    }
+    fun toggleFavorite() {
+        val next = !favorite.value
+        viewModelScope.launch {
+            try {
+                val owner = requireNotNull(workoutRepository.getWorkoutOnce(workoutId)?.athleteId)
+                exerciseRepository.setFavorite(exerciseId, next, owner)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось изменить избранное. Попробуйте ещё раз.") } }
+        }
     }
     fun setWeightStep(step: Double) = mutate {
         exerciseRepository.updateWeightStep(exerciseId, step)

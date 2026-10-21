@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -62,7 +62,7 @@ fun MonthCalendar(
         ) {
             CalendarArrow(
                 onClick = onPreviousMonth,
-                icon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Предыдущий месяц") },
+                icon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, contentDescription = "Предыдущий месяц") },
             )
             Text(
                 text = month.format(MONTH_TITLE).replaceFirstChar { it.titlecase(RU) },
@@ -72,7 +72,7 @@ fun MonthCalendar(
             )
             CalendarArrow(
                 onClick = onNextMonth,
-                icon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Следующий месяц") },
+                icon = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = "Следующий месяц") },
             )
         }
 

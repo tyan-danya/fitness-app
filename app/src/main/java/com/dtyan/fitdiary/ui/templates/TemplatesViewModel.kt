@@ -48,6 +48,8 @@ class TemplatesViewModel(
 ) : ViewModel() {
     val templates = repository.observeTemplates(ownerId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val exercises = exerciseRepository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    /** Избранное владельца программы — в каталоге выбора оно идёт первым. */
+    val favoriteIds = exerciseRepository.observeFavoriteIds(ownerId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
     private val _draft = MutableStateFlow(decodeDraft(savedState["templateDraft"]))
     val draft = _draft.asStateFlow()
     private val _busy = MutableStateFlow(false)

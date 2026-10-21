@@ -2,7 +2,6 @@
 
 package com.dtyan.fitdiary.ui.workout
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
@@ -10,55 +9,55 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.FormatListNumbered
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,7 +70,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
@@ -81,7 +79,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
@@ -90,17 +87,26 @@ import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.domain.ExerciseGuides
-import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
-import com.dtyan.fitdiary.ui.common.ExerciseGuideButton
 import com.dtyan.fitdiary.ui.common.ConfettiBurst
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.EmptyState
+import com.dtyan.fitdiary.ui.common.ExerciseGuideButton
+import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
+import com.dtyan.fitdiary.ui.common.FavoriteToggle
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.FitDimens
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
 import com.dtyan.fitdiary.ui.common.IllustrationDumbbell
 import com.dtyan.fitdiary.ui.common.PhotoViewerDialog
 import com.dtyan.fitdiary.ui.common.SectionHeader
-import com.dtyan.fitdiary.ui.common.pressScale
+import com.dtyan.fitdiary.ui.common.StatusPill
 import com.dtyan.fitdiary.ui.common.rememberPhotoPicker
+import com.dtyan.fitdiary.ui.common.sectionColors
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlinx.coroutines.launch
 
@@ -126,7 +132,7 @@ fun ExerciseLogScreen(
     onBack: () -> Unit,
     onOpenExercise: ((Long, Long) -> Unit)? = null,
     onPlanComplete: ((Long) -> Unit)? = null,
-) {
+) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     val groupFlow = remember(workoutId) { container.workoutRepository.observeGroupWorkouts(workoutId) }
     val group by groupFlow.collectAsStateWithLifecycle(emptyList())
@@ -136,10 +142,11 @@ fun ExerciseLogScreen(
     val selected = available.firstOrNull { it.id == selectedId } ?: available.firstOrNull()
     if (selected == null) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(if (group.isEmpty()) "Загружаем тренировку…" else "Все участники завершили тренировку")
-            TextButton(onClick = onBack) { Text("Назад") }
+            Text(if (group.isEmpty()) "Загружаем тренировку…" else "Все участники завершили тренировку",
+                style = MaterialTheme.typography.titleMedium)
+            FitButton("Назад", onBack, kind = FitButtonKind.Outlined)
         }
-        return
+        return@FitSectionScope
     }
     val names = athletes.associate { it.id to it.name }
     AthleteExerciseLogScreen(
@@ -186,6 +193,7 @@ private fun AthleteExerciseLogScreen(
     val weightText by vm.weightText.collectAsStateWithLifecycle()
     val repsText by vm.repsText.collectAsStateWithLifecycle()
     val plan by vm.plan.collectAsStateWithLifecycle()
+    val favorite by vm.favorite.collectAsStateWithLifecycle()
     val plannedExercise = plan.firstOrNull { it.exercise.id == exerciseId }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -211,7 +219,7 @@ private fun AthleteExerciseLogScreen(
     LaunchedEffect(vm) {
         vm.prEvents.collect {
             prCount += 1
-            snackbarHostState.showSnackbar("🏆 $athleteName: новый личный рекорд!")
+            snackbarHostState.showSnackbar("$athleteName: новый личный рекорд!")
         }
     }
 
@@ -242,40 +250,13 @@ private fun AthleteExerciseLogScreen(
             // on short screens or with a large system font.
             bottomBar = { SnackbarHost(snackbarHostState) },
             topBar = {
-                TopAppBar(
-                    windowInsets = WindowInsets(0, 0, 0, 0),
-                    title = {
-                        Column {
-                            Text(
-                                text = ui.exerciseName.ifEmpty { "Упражнение" },
-                                style = MaterialTheme.typography.titleLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            ui.recordWeightKg?.let {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = fitAccents.gold,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                    Text(
-                                        text = "Рекорд: ${Format.weight(it)} кг",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = fitAccents.gold,
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                        }
+                DetailTopBar(
+                    title = ui.exerciseName.ifEmpty { "Упражнение" },
+                    subtitle = listOfNotNull(ui.muscleGroup.takeIf { it.isNotBlank() }, ui.equipment.takeIf { it.isNotBlank() })
+                        .joinToString(" · ").ifEmpty { null },
+                    onBack = onBack,
+                    actions = {
+                        if (ui.exerciseName.isNotEmpty()) FavoriteToggle(favorite, vm::toggleFavorite, ui.exerciseName)
                     },
                 )
             },
@@ -286,19 +267,20 @@ private fun AthleteExerciseLogScreen(
                     .fillMaxSize()
                     .imePadding()
                     .padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(start = FitDimens.ScreenPadding, end = FitDimens.ScreenPadding, top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(FitDimens.ItemGap),
             ) {
-                stickyHeader(key = "participants") {
+                if (participants.size > 1) stickyHeader(key = "participants") {
                     Surface(Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.background) {
                         ParticipantChips(participants, participantNames, workoutId, !ui.saving, onSelect)
                     }
                 }
                 item(key = "photo") {
-                    ExercisePhotoBlock(
+                    ExerciseHeaderBlock(
                         exerciseName = ui.exerciseName,
                         photoPath = ui.photoPath,
                         equipment = ui.equipment,
+                        recordWeightKg = ui.recordWeightKg,
                         onOpenPhoto = { showPhotoViewer = true },
                         onCamera = photoPicker.launchCamera,
                         onGallery = photoPicker.launchGallery,
@@ -309,23 +291,21 @@ private fun AthleteExerciseLogScreen(
                     )
                 }
 
-                item(key = "input") {
-                    plannedExercise?.let { planned ->
-                        Column(Modifier.padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                plannedExercise?.let { planned ->
+                    item(key = "plan") {
+                        val colors = sectionColors()
+                        FitCard(color = colors.container, contentColor = colors.onContainer, spacing = 4.dp) {
                             Text("План: упражнение ${plan.indexOf(planned) + 1} из ${plan.size}", style = MaterialTheme.typography.titleSmall)
-                            if (planned.targetSets != null || planned.targetReps != null) {
-                                Text(listOfNotNull(planned.targetSets?.let { "Подходы: $it" },
-                                    planned.targetReps?.let { "Повторы: $it" }).joinToString(" · "))
+                            planTarget(planned.targetSets, planned.targetReps)?.let {
+                                Text(it, style = MaterialTheme.typography.bodyLarge)
                                 Text("Это ориентир. Запишите свой фактический вес и повторы.", style = MaterialTheme.typography.bodySmall)
                             }
                             planned.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                         }
                     }
-                    ui.previousSets.lastOrNull()?.let { previous ->
-                        TextButton(onClick = vm::repeatPrevious, enabled = !ui.saving) {
-                            Text("Повторить прошлый: ${Format.weight(previous.weightKg)} кг × ${previous.reps}")
-                        }
-                    }
+                }
+
+                item(key = "input") {
                     SetInputCard(
                         weightText = weightText,
                         repsText = repsText,
@@ -339,33 +319,34 @@ private fun AthleteExerciseLogScreen(
                         busy = ui.saving,
                         weightStep = ui.weightStepKg,
                         onStepChange = vm::setWeightStep,
+                        previous = ui.previousSets.lastOrNull(),
+                        onRepeatPrevious = vm::repeatPrevious,
                     )
                     ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
                 }
 
                 if (plannedExercise != null) item(key = "complete_exercise") {
                     if (plannedExercise.completedAt != null) {
-                        Text("✓ Это упражнение выполнено", style = MaterialTheme.typography.titleSmall)
-                        TextButton(onClick = vm::reopenExercise, enabled = !ui.saving) { Text("Вернуть упражнение в план") }
+                        val colors = sectionColors()
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            StatusPill("Упражнение выполнено", icon = Icons.Rounded.CheckCircle, container = colors.container,
+                                contentColor = colors.onContainer)
+                            FitButton("Вернуть в план", vm::reopenExercise, kind = FitButtonKind.Plain, compact = true, enabled = !ui.saving)
+                        }
                     } else {
-                        OutlinedButton(onClick = {
+                        FitButton("Упражнение выполнено, дальше", {
                             focusManager.clearFocus()
                             vm.completeExercise(onNextExercise)
-                        }, enabled = !ui.saving && todaySets.isNotEmpty(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                            Text("Упражнение выполнено → следующее", textAlign = TextAlign.Center)
-                        }
+                        }, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined, icon = Icons.Rounded.TaskAlt,
+                            enabled = !ui.saving && todaySets.isNotEmpty())
                         Text(if (todaySets.isEmpty()) "Сначала запишите хотя бы один подход."
-                            else "Завершает упражнение только для: $athleteName", style = MaterialTheme.typography.bodySmall)
+                            else "Отмечает упражнение только для: $athleteName", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
                     }
                 }
 
                 item(key = "header_today") {
-                    SectionHeader(
-                        icon = Icons.Filled.FormatListNumbered,
-                        title = "Сегодня",
-                        iconTint = fitAccents.workout,
-                        iconContainer = fitAccents.workoutContainer,
-                    )
+                    SectionHeader(icon = Icons.Rounded.FormatListNumbered, title = "Сегодня")
                 }
 
                 if (todaySets.isEmpty()) {
@@ -418,136 +399,72 @@ private fun AthleteExerciseLogScreen(
         AlertDialog(
             onDismissRequest = { deletingSet = null },
             title = { Text("Удалить подход?") },
-            text = {
-                Text("Подход ${set.setIndex}: ${Format.weight(set.weightKg)}×${set.reps}")
-            },
+            text = { Text("Подход ${set.setIndex}: ${Format.weight(set.weightKg)} × ${set.reps}") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        vm.deleteSet(set)
-                        deletingSet = null
-                    },
-                ) {
+                TextButton(onClick = { vm.deleteSet(set); deletingSet = null }) {
                     Text("Удалить", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { deletingSet = null }) {
-                    Text("Отмена")
-                }
-            },
+            dismissButton = { TextButton(onClick = { deletingSet = null }) { Text("Отмена") } },
         )
     }
-
 }
 
 /**
- * Компактный блок «фото тренажёра + вид оборудования» между шапкой и вводом.
- * Своё фото открывается как раньше; без него показана встроенная схема.
- * Справка и меню фото доступны независимо от того, добавил ли человек фотографию.
+ * Шапка упражнения: своё фото или встроенная схема, оборудование и рекорд,
+ * а под ними две подписанные кнопки — «Техника» и «Фото тренажёра».
  */
 @Composable
-private fun ExercisePhotoBlock(
+private fun ExerciseHeaderBlock(
     exerciseName: String,
     photoPath: String?,
     equipment: String,
+    recordWeightKg: Double?,
     onOpenPhoto: () -> Unit,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-
     val guide = ExerciseGuides.resolve(exerciseName, equipment)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         if (photoPath != null) {
             ExercisePhotoThumb(
                 photoPath = photoPath,
-                size = 64.dp,
-                modifier = Modifier.clickable(onClick = onOpenPhoto),
-                fallback = {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    )
-                },
+                size = 72.dp,
+                modifier = Modifier.clickable(onClickLabel = "Открыть фото тренажёра", onClick = onOpenPhoto),
+                fallback = { Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh)) },
             )
         } else {
-            ExerciseGuideThumb(guide, size = 64.dp, displayName = exerciseName)
+            ExerciseGuideThumb(guide, size = 72.dp, displayName = exerciseName)
         }
-        Column(Modifier.weight(1f)) {
-            if (equipment.isNotBlank()) EquipmentPill(equipment)
-            ExerciseGuideButton(guide, photoPath, displayName = exerciseName)
-        }
-        Box {
-            IconButton(onClick = { menuOpen = true }) {
-                Icon(Icons.Filled.PhotoCamera, contentDescription = if (photoPath == null) "Добавить фото тренажёра" else "Заменить фото")
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            recordWeightKg?.let {
+                StatusPill("Рекорд: ${Format.weight(it)} кг", icon = Icons.Rounded.EmojiEvents,
+                    container = fitAccents.gold.copy(alpha = 0.16f), contentColor = MaterialTheme.colorScheme.onSurface)
             }
-            PhotoSourceMenu(
-                expanded = menuOpen, hasPhoto = photoPath != null,
-                onDismiss = { menuOpen = false }, onCamera = onCamera, onGallery = onGallery, onDelete = onDelete,
-            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                ExerciseGuideButton(guide, photoPath, displayName = exerciseName)
+                Box {
+                    FitButton(if (photoPath == null) "Фото тренажёра" else "Сменить фото", { menuOpen = true },
+                        kind = FitButtonKind.Plain, compact = true, icon = Icons.Rounded.PhotoCamera)
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(text = { Text("Сфотографировать") },
+                            leadingIcon = { Icon(Icons.Rounded.PhotoCamera, null) },
+                            onClick = { menuOpen = false; onCamera() })
+                        DropdownMenuItem(text = { Text("Из галереи") },
+                            leadingIcon = { Icon(Icons.Rounded.Image, null) },
+                            onClick = { menuOpen = false; onGallery() })
+                        if (photoPath != null) DropdownMenuItem(
+                            text = { Text("Удалить фото", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menuOpen = false; onDelete() })
+                    }
+                }
+            }
         }
     }
 }
-
-/** Меню выбора источника фото: камера, галерея и (если фото уже есть) удаление. */
-@Composable
-private fun PhotoSourceMenu(
-    expanded: Boolean,
-    hasPhoto: Boolean,
-    onDismiss: () -> Unit,
-    onCamera: () -> Unit,
-    onGallery: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-        DropdownMenuItem(
-            text = { Text("Сфотографировать") },
-            onClick = {
-                onDismiss()
-                onCamera()
-            },
-        )
-        DropdownMenuItem(
-            text = { Text("Из галереи") },
-            onClick = {
-                onDismiss()
-                onGallery()
-            },
-        )
-        if (hasPhoto) {
-            DropdownMenuItem(
-                text = { Text("Удалить фото", color = MaterialTheme.colorScheme.error) },
-                onClick = {
-                    onDismiss()
-                    onDelete()
-                },
-            )
-        }
-    }
-}
-
-/** Пилюля с видом оборудования («Тренажёр», «Штанга»…). */
-@Composable
-private fun EquipmentPill(text: String) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-        )
-    }
-}
-
 
 @Composable
 private fun SetInputCard(
@@ -563,6 +480,8 @@ private fun SetInputCard(
     busy: Boolean,
     weightStep: Double,
     onStepChange: (Double) -> Unit,
+    previous: WorkoutSet?,
+    onRepeatPrevious: () -> Unit,
 ) {
     val weight = weightText.replace(',', '.').toDoubleOrNull()
     val reps = repsText.toIntOrNull()
@@ -571,36 +490,35 @@ private fun SetInputCard(
     var stepMenu by remember { mutableStateOf(false) }
     val largeText = LocalDensity.current.fontScale > 1.2f
     val repsFocus = remember { FocusRequester() }
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Подход для: $athleteName", style = MaterialTheme.typography.titleMedium)
-            BoxWithConstraints {
-                val weightField: @Composable (Modifier) -> Unit = { modifier ->
-                    StepperColumn("Вес, кг", weightText, onWeightChange, KeyboardType.Decimal,
-                        { onBumpWeight(-weightStep) }, { onBumpWeight(weightStep) }, !busy,
-                        weightText.isNotBlank() && !weightValid, modifier, onNext = { repsFocus.requestFocus() })
+    FitCard(spacing = 12.dp) {
+        Text("Подход для: $athleteName", style = MaterialTheme.typography.titleMedium)
+        BoxWithConstraints {
+            val weightField: @Composable (Modifier) -> Unit = { modifier ->
+                StepperColumn("Вес, кг", weightText, onWeightChange, KeyboardType.Decimal,
+                    { onBumpWeight(-weightStep) }, { onBumpWeight(weightStep) }, !busy,
+                    weightText.isNotBlank() && !weightValid, modifier, onNext = { repsFocus.requestFocus() })
+            }
+            val repsField: @Composable (Modifier) -> Unit = { modifier ->
+                StepperColumn("Повторы", repsText, onRepsChange, KeyboardType.Number,
+                    { onBumpReps(-1) }, { onBumpReps(1) }, !busy,
+                    repsText.isNotBlank() && !repsValid, modifier, focusRequester = repsFocus)
+            }
+            if (maxWidth < 420.dp || largeText) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    weightField(Modifier.fillMaxWidth())
+                    repsField(Modifier.fillMaxWidth())
                 }
-                val repsField: @Composable (Modifier) -> Unit = { modifier ->
-                    StepperColumn("Повторы", repsText, onRepsChange, KeyboardType.Number,
-                        { onBumpReps(-1) }, { onBumpReps(1) }, !busy,
-                        repsText.isNotBlank() && !repsValid, modifier, focusRequester = repsFocus)
-                }
-                if (maxWidth < 420.dp || largeText) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        weightField(Modifier.fillMaxWidth())
-                        repsField(Modifier.fillMaxWidth())
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        weightField(Modifier.weight(1f))
-                        repsField(Modifier.weight(1f))
-                    }
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    weightField(Modifier.weight(1f))
+                    repsField(Modifier.weight(1f))
                 }
             }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
-                TextButton(onClick = { stepMenu = true }, enabled = !busy) {
-                    Text("Шаг веса: ${Format.weight(weightStep)} кг")
-                }
+                FitButton("Шаг: ${Format.weight(weightStep)} кг", { stepMenu = true }, kind = FitButtonKind.Tonal,
+                    compact = true, icon = Icons.Rounded.Straighten, enabled = !busy)
                 DropdownMenu(expanded = stepMenu, onDismissRequest = { stepMenu = false }) {
                     listOf(0.5, 1.0, 1.25, 2.5, 5.0, 10.0).forEach { step ->
                         DropdownMenuItem(text = { Text("${Format.weight(step)} кг") },
@@ -608,21 +526,18 @@ private fun SetInputCard(
                     }
                 }
             }
-            if ((!weightValid && weightText.isNotBlank()) || (!repsValid && repsText.isNotBlank())) {
-                Text("Вес: от 0 до 2000 кг. Повторы: от 1 до 999.", color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            Button(onClick = onAdd, enabled = weightValid && repsValid && !busy,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Text("Записать · $athleteName", textAlign = TextAlign.Center)
-            }
-            if (onNext != null) {
-                OutlinedButton(onClick = onNext, enabled = weightValid && repsValid && !busy,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text("Записать и следующий", textAlign = TextAlign.Center)
-                }
-            }
+            if (previous != null) FitButton("Как в прошлый раз: ${Format.weight(previous.weightKg)} × ${previous.reps}",
+                onRepeatPrevious, kind = FitButtonKind.Tonal, compact = true, icon = Icons.Rounded.Replay, enabled = !busy)
+        }
+        if ((!weightValid && weightText.isNotBlank()) || (!repsValid && repsText.isNotBlank())) {
+            Text("Вес: от 0 до 2000 кг. Повторы: от 1 до 999.", color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        FitButton("Записать · $athleteName", onAdd, Modifier.fillMaxWidth(), loading = busy,
+            enabled = weightValid && repsValid)
+        if (onNext != null) {
+            FitButton("Записать и следующий", onNext, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined,
+                enabled = weightValid && repsValid && !busy)
         }
     }
 }
@@ -642,22 +557,24 @@ private fun StepperColumn(
     focusRequester: FocusRequester? = null,
 ) {
     val focusManager = LocalFocusManager.current
-    Row(modifier, verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        IconButton(onClick = onMinus, enabled = enabled, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Remove, contentDescription = "Уменьшить: $label")
+    val colors = sectionColors()
+    val stepperColors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = colors.container, contentColor = colors.onContainer)
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilledTonalIconButton(onClick = onMinus, enabled = enabled, modifier = Modifier.size(48.dp), colors = stepperColors) {
+            Icon(Icons.Rounded.Remove, contentDescription = "Уменьшить: $label")
         }
         OutlinedTextField(
             value = value, onValueChange = onValueChange, label = { Text(label) },
             singleLine = true, enabled = enabled, isError = isError,
+            shape = MaterialTheme.shapes.medium,
             textStyle = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType,
                 imeAction = if (onNext != null) ImeAction.Next else ImeAction.Done),
             keyboardActions = KeyboardActions(onNext = { onNext?.invoke() }, onDone = { focusManager.clearFocus() }),
             modifier = Modifier.weight(1f).then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
         )
-        IconButton(onClick = onPlus, enabled = enabled, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Filled.Add, contentDescription = "Увеличить: $label")
+        FilledTonalIconButton(onClick = onPlus, enabled = enabled, modifier = Modifier.size(48.dp), colors = stepperColors) {
+            Icon(Icons.Rounded.Add, contentDescription = "Увеличить: $label")
         }
     }
 }
@@ -669,51 +586,26 @@ private fun TodaySetRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.small)
-            .clickable(onClick = onEdit)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Номер подхода в круглом бейдже.
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(fitAccents.workoutContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "${set.setIndex}",
-                style = MaterialTheme.typography.titleSmall,
-                color = fitAccents.onWorkoutContainer,
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "${Format.weight(set.weightKg)} × ${set.reps}",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = Format.time(set.completedAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (trend != null) Text(trend.text, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        IconButton(onClick = onEdit) {
-            Icon(Icons.Filled.Edit, contentDescription = "Изменить подход ${set.setIndex}")
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = "Удалить подход ${set.setIndex}",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+    val colors = sectionColors()
+    FitCard(onClick = onEdit, onClickLabel = "Изменить подход ${set.setIndex}", shape = MaterialTheme.shapes.medium,
+        contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(colors.container), contentAlignment = Alignment.Center) {
+                Text("${set.setIndex}", style = MaterialTheme.typography.titleSmall, color = colors.onContainer)
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("${Format.weight(set.weightKg)} × ${set.reps}", style = MaterialTheme.typography.titleMedium)
+                Text(listOfNotNull(Format.time(set.completedAt), trend?.text).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Rounded.Edit, contentDescription = "Изменить подход ${set.setIndex}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Rounded.Delete, contentDescription = "Удалить подход ${set.setIndex}",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
@@ -725,33 +617,22 @@ private fun PreviousWorkoutBlock(ui: ExerciseLogUiState) {
     if (ui.previousSets.isEmpty()) {
         EmptyState(
             title = "Первый раз!",
-            subtitle = "Сделай подход — будет с чем сравнивать в следующий раз",
+            subtitle = "Сделайте подход — будет с чем сравнивать в следующий раз",
             illustration = { IllustrationDumbbell(size = 96.dp) },
         )
     } else {
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SectionHeader(
-                icon = Icons.Filled.History,
-                title = ui.previousDateText
-                    ?.let { "Прошлая тренировка ($it)" }
-                    ?: "Прошлая тренировка",
+                icon = Icons.Rounded.History,
+                title = ui.previousDateText?.let { "Прошлая тренировка · $it" } ?: "Прошлая тренировка",
             )
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .animateContentSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    ui.previousSets.forEach { set ->
-                        Text(
-                            text = "${set.setIndex} · ${Format.weight(set.weightKg)}×${set.reps}",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+            FitCard {
+                ui.previousSets.forEachIndexed { index, set ->
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${set.setIndex}", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${Format.weight(set.weightKg)} × ${set.reps}", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
@@ -796,17 +677,10 @@ private fun EditSetDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onSave(weightValue ?: return@Button, repsValue ?: return@Button) },
-                enabled = canSave,
-            ) {
+            TextButton(onClick = { onSave(weightValue ?: return@TextButton, repsValue ?: return@TextButton) }, enabled = canSave) {
                 Text("Сохранить")
             }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Отмена")
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
     )
 }

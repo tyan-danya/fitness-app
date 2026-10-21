@@ -55,6 +55,17 @@ interface ExerciseDao {
     suspend fun update(exercise: Exercise)
     @Query("UPDATE exercises SET weightStepKg = :stepKg WHERE id = :id")
     suspend fun setWeightStep(id: Long, stepKg: Double)
+
+    /** Избранное конкретного профиля в порядке добавления. */
+    @Query("SELECT exerciseId FROM favorite_exercises WHERE athleteId = :athleteId ORDER BY createdAt")
+    fun observeFavoriteIds(athleteId: Long): Flow<List<Long>>
+    @Query("SELECT exerciseId FROM favorite_exercises WHERE athleteId = :athleteId ORDER BY createdAt")
+    suspend fun getFavoriteIds(athleteId: Long): List<Long>
+    /** Повторная отметка не меняет исходное время добавления. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFavorite(favorite: FavoriteExercise)
+    @Query("DELETE FROM favorite_exercises WHERE athleteId = :athleteId AND exerciseId = :exerciseId")
+    suspend fun deleteFavorite(athleteId: Long, exerciseId: Long)
 }
 
 @Dao

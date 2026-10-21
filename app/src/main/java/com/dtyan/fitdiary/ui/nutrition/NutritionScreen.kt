@@ -27,22 +27,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.IosShare
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -53,7 +47,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,13 +77,27 @@ import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.Meal
 import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.ui.common.DaySwitcher
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.FitDimens
+import com.dtyan.fitdiary.ui.common.FitFab
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
+import com.dtyan.fitdiary.ui.common.IconBadge
+import com.dtyan.fitdiary.ui.common.MenuAction
+import com.dtyan.fitdiary.ui.common.OverflowMenu
 import com.dtyan.fitdiary.ui.common.ProgressRing
+import com.dtyan.fitdiary.ui.common.StatusPill
+import com.dtyan.fitdiary.ui.common.TabHeader
+import com.dtyan.fitdiary.ui.common.icon
 import com.dtyan.fitdiary.ui.common.pressScale
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlinx.coroutines.delay
 import java.time.LocalDate
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -106,9 +113,8 @@ private data class DragState(
 )
 
 /** Экран «Питание»: дневник КБЖУ по дням — итог дня, приёмы по группам (завтрак/обед/ужин/перекус), добавление и цели. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NutritionScreen() {
+fun NutritionScreen() = FitSectionScope(FitSection.NUTRITION) {
     val context = LocalContext.current
     val container = context.appContainer
     val vm: NutritionViewModel = viewModel {
@@ -131,7 +137,6 @@ fun NutritionScreen() {
 
     var goalsDialogOpen by rememberSaveable { mutableStateOf(false) }
     var aiDialogOpen by rememberSaveable { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     // id приёма, для которого открыт диалог удаления; -1 — диалог закрыт
     var deleteMealId by rememberSaveable { mutableStateOf(-1L) }
 
@@ -171,48 +176,20 @@ fun NutritionScreen() {
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            TopAppBar(
-                title = { Text("Питание") },
-                windowInsets = WindowInsets(0.dp),
-                actions = {
-                    IconButton(onClick = { goalsDialogOpen = true }) {
-                        Icon(Icons.Filled.Tune, contentDescription = "Цели питания")
-                    }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Ещё")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Расчёт через ИИ…") },
-                            leadingIcon = { Icon(Icons.Filled.AutoAwesome, contentDescription = null) },
-                            onClick = { menuOpen = false; aiDialogOpen = true },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (pending > 0) "Выгрузить для расчёта ($pending)" else "Выгрузить для расчёта") },
-                            leadingIcon = { Icon(Icons.Filled.IosShare, contentDescription = null) },
-                            enabled = !busy,
-                            onClick = { menuOpen = false; vm.exportPendingEstimates() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Загрузить расчёт из файла") },
-                            leadingIcon = { Icon(Icons.Filled.FileDownload, contentDescription = null) },
-                            enabled = !busy,
-                            onClick = { menuOpen = false; importLauncher.launch(arrayOf("*/*")) },
-                        )
-                    }
-                },
-            )
+            TabHeader(title = "Питание", actions = {
+                OverflowMenu(listOf(
+                    MenuAction("Цели на день", Icons.Rounded.Tune) { goalsDialogOpen = true },
+                    MenuAction("Расчёт через ИИ…", Icons.Rounded.AutoAwesome) { aiDialogOpen = true },
+                    MenuAction(if (pending > 0) "Выгрузить для расчёта ($pending)" else "Выгрузить для расчёта",
+                        Icons.Rounded.IosShare, enabled = !busy) { vm.exportPendingEstimates() },
+                    MenuAction("Загрузить расчёт из файла", Icons.Rounded.FileDownload, enabled = !busy) {
+                        importLauncher.launch(arrayOf("*/*"))
+                    },
+                ), contentDescription = "Ещё: цели и расчёт КБЖУ")
+            })
         },
         floatingActionButton = {
-            // onSecondary — гарантированный контраст к оранжевому акценту в обеих темах
-            ExtendedFloatingActionButton(
-                onClick = { vm.openAddEditor() },
-                modifier = Modifier.pressScale(),
-                containerColor = fitAccents.nutrition,
-                contentColor = MaterialTheme.colorScheme.onSecondary,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Добавить") },
-            )
+            FitFab("Добавить", Icons.Rounded.Add, onClick = { vm.openAddEditor() })
         },
     ) { innerPadding ->
         Column(
@@ -220,15 +197,25 @@ fun NutritionScreen() {
                 .padding(innerPadding)
                 .fillMaxSize(),
         ) {
+            val today = LocalDate.now()
             DaySwitcher(
-                day = selectedDay,
+                label = when (selectedDay) {
+                    today -> "Сегодня"
+                    today.minusDays(1) -> "Вчера"
+                    else -> Format.dateWithDayOfWeek(selectedDay)
+                },
                 onPrevious = { vm.shiftDay(-1) },
                 onNext = { vm.shiftDay(1) },
-                onBackToToday = vm::resetToToday,
+                onLabelClick = vm::resetToToday,
+                modifier = Modifier.padding(horizontal = FitDimens.ScreenPadding, vertical = 4.dp),
             )
             MealList(
                 meals = meals,
                 settings = settings,
+                busy = busy,
+                onGoals = { goalsDialogOpen = true },
+                onExportPending = vm::exportPendingEstimates,
+                onImportEstimates = { importLauncher.launch(arrayOf("*/*")) },
                 onAdd = { type -> vm.openAddEditor(type) },
                 onEdit = { vm.openEditEditor(it) },
                 onDelete = { deleteMealId = it.id },
@@ -317,6 +304,10 @@ fun NutritionScreen() {
 private fun MealList(
     meals: List<Meal>,
     settings: SettingsStore.Settings,
+    busy: Boolean,
+    onGoals: () -> Unit,
+    onExportPending: () -> Unit,
+    onImportEstimates: () -> Unit,
     onAdd: (MealType) -> Unit,
     onEdit: (Meal) -> Unit,
     onDelete: (Meal) -> Unit,
@@ -420,11 +411,15 @@ private fun MealList(
                         onDragCancel = { drag = null },
                     )
                 },
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = FitDimens.FabClearance),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item(key = "summary") {
-                DaySummaryCard(meals = meals, settings = settings)
+                DaySummaryCard(meals = meals, settings = settings, onGoals = onGoals)
+            }
+            val pending = meals.count { it.needsEstimate }
+            if (pending > 0) item(key = "pending") {
+                PendingEstimatesCard(pending, busy, onExportPending, onImportEstimates)
             }
             sections.forEach { section ->
                 item(key = KEY_HEADER + section.type.name) {
@@ -497,7 +492,7 @@ private fun MealSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(section.type.emoji, style = MaterialTheme.typography.titleMedium)
+            IconBadge(section.type.icon, size = 32.dp)
             Text(
                 text = section.type.title,
                 modifier = Modifier.weight(1f),
@@ -510,7 +505,7 @@ private fun MealSectionHeader(
             )
             IconButton(onClick = onAdd) {
                 Icon(
-                    Icons.Filled.Add,
+                    Icons.Rounded.Add,
                     contentDescription = "Добавить в «${section.type.title}»",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -548,69 +543,15 @@ private fun EmptySectionHint(
 }
 
 /**
- * Переключатель дня: круглые стрелки по бокам, по центру дата-«пилюля»
- * в цвете раздела. Тап по дате — возврат к сегодняшнему дню.
- */
-@Composable
-private fun DaySwitcher(
-    day: LocalDate,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
-    onBackToToday: () -> Unit,
-) {
-    val today = LocalDate.now()
-    val label = when (day) {
-        today -> "Сегодня"
-        today.minusDays(1) -> "Вчера"
-        else -> Format.dateWithDayOfWeek(day)
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            IconButton(onClick = onPrevious) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Предыдущий день")
-            }
-        }
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-            Surface(
-                modifier = Modifier.pressScale(),
-                shape = CircleShape,
-                color = fitAccents.nutritionContainer,
-                contentColor = fitAccents.onNutritionContainer,
-            ) {
-                Text(
-                    text = label,
-                    modifier = Modifier
-                        .clickable(onClickLabel = "Вернуться к сегодняшнему дню", onClick = onBackToToday)
-                        .padding(horizontal = 24.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                )
-            }
-        }
-        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            IconButton(onClick = onNext) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = "Следующий день")
-            }
-        }
-    }
-}
-
-/**
  * Герой экрана — «Итог дня»: слева кольцо калорий с числом-героем,
  * справа три полоски макронутриентов (Б/Ж/У) в фирменных цветах.
  */
 @Composable
-private fun DaySummaryCard(meals: List<Meal>, settings: SettingsStore.Settings) {
+private fun DaySummaryCard(meals: List<Meal>, settings: SettingsStore.Settings, onGoals: () -> Unit) {
     val calories = meals.sumOf { it.calories }
     val protein = meals.sumOf { it.proteinG }
     val fat = meals.sumOf { it.fatG }
     val carbs = meals.sumOf { it.carbsG }
-    val pending = meals.count { it.needsEstimate }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -633,22 +574,33 @@ private fun DaySummaryCard(meals: List<Meal>, settings: SettingsStore.Settings) 
                     MacroBar("Углеводы", carbs, settings.carbGoalG, fitAccents.carbs)
                 }
             }
-            if (pending > 0) {
-                Text(
-                    text = "⏳ $pending ${pluralPending(pending)} без КБЖУ — итог дня неполный",
-                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 14.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            FitButton("Цели на день", onGoals, Modifier.padding(start = 8.dp, bottom = 8.dp), kind = FitButtonKind.Plain,
+                compact = true, icon = Icons.Rounded.Tune)
         }
     }
 }
 
-private fun pluralPending(n: Int): String = when {
-    n % 10 == 1 && n % 100 != 11 -> "приём"
-    n % 10 in 2..4 && n % 100 !in 12..14 -> "приёма"
-    else -> "приёмов"
+/** Приёмы без КБЖУ: итог дня неполный — сразу видно, как его досчитать. */
+@Composable
+private fun PendingEstimatesCard(pending: Int, busy: Boolean, onExport: () -> Unit, onImport: () -> Unit) {
+    FitCard(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconBadge(Icons.Rounded.HourglassTop, size = 36.dp)
+            Column(Modifier.weight(1f)) {
+                Text("$pending ${Format.plural(pending, "приём ждёт", "приёма ждут", "приёмов ждут")} расчёта КБЖУ",
+                    style = MaterialTheme.typography.titleSmall)
+                Text("Итог дня неполный. Выгрузите файл для расчёта, а потом загрузите ответ.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        FitButtonRow(
+            minWidthForRow = 300.dp,
+            first = { m -> FitButton("Выгрузить", onExport, m, kind = FitButtonKind.Tonal, compact = true,
+                icon = Icons.Rounded.IosShare, enabled = !busy) },
+            second = { m -> FitButton("Загрузить расчёт", onImport, m, kind = FitButtonKind.Outlined, compact = true,
+                icon = Icons.Rounded.FileDownload, enabled = !busy) },
+        )
+    }
 }
 
 /** Кольцо калорий: съеденное — число-герой, под ним цель. При переборе кольцо краснеет. */
@@ -659,7 +611,7 @@ private fun CalorieRing(calories: Int, goal: Int) {
     val animatedCalories by animateIntAsState(targetValue = calories, label = "kcalValue")
     ProgressRing(
         progress = calories.toFloat() / goal.coerceAtLeast(1),
-        ringSize = 140.dp,
+        ringSize = 128.dp,
         color = if (overGoal) MaterialTheme.colorScheme.error else fitAccents.nutrition,
         trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
@@ -782,11 +734,7 @@ private fun MealCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (meal.needsEstimate) {
-                    Text(
-                        text = "⏳ ждёт расчёта КБЖУ",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    StatusPill("ждёт расчёта КБЖУ", icon = Icons.Rounded.HourglassTop)
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
@@ -809,7 +757,7 @@ private fun MealCard(
             }
             IconButton(onClick = onDeleteClick) {
                 Icon(
-                    Icons.Outlined.Delete,
+                    Icons.Rounded.Delete,
                     contentDescription = "Удалить приём пищи",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -818,7 +766,4 @@ private fun MealCard(
     }
 }
 
-private val RU_LOCALE = Locale("ru")
-
-/** «1 850» — разряды через пробел, как принято в русской типографике. */
-private fun formatKcal(value: Int): String = String.format(RU_LOCALE, "%,d", value)
+private fun formatKcal(value: Int): String = Format.kcal(value)

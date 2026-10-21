@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -18,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.export.BackupManager
 import com.dtyan.fitdiary.export.BackupRestoreDialog
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -68,7 +72,7 @@ fun BackupDialog(onDismiss: () -> Unit, onRestored: () -> Unit) {
                     Text("Копия содержит все профили, тренировки, программы, записанную активность, цели, питание, замеры, каталог и фото. API-ключ и настройки подключения ИИ в неё не входят.")
                     Text("Перед копированием сохраните результат секундомера. Незавершённый замер времени в копию не входит.",
                         style = MaterialTheme.typography.bodySmall)
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                    FitButton("Сохранить копию", {
                         scope.launch {
                             busy = true; error = null
                             try { context.startActivity(manager.createBackup()) }
@@ -76,11 +80,11 @@ fun BackupDialog(onDismiss: () -> Unit, onRestored: () -> Unit) {
                             catch (e: Exception) { error = e.message ?: "Не удалось сохранить копию" }
                             finally { busy = false }
                         }
-                    }) { Text("Сохранить копию") }
-                    OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                    }, Modifier.fillMaxWidth(), icon = Icons.Rounded.Backup, enabled = !busy)
+                    FitButton("Восстановить из файла", {
                         error = null; launcher.launch(arrayOf("application/zip", "application/octet-stream"))
-                    }) { Text("Восстановить из файла") }
-                    if (manager.hasRecoveryCopy()) OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                    }, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined, icon = Icons.Rounded.Restore, enabled = !busy)
+                    if (manager.hasRecoveryCopy()) FitButton("Вернуть предыдущий дневник", {
                         scope.launch {
                             busy = true; error = null
                             try { preview = manager.recoveryPreview() }
@@ -88,7 +92,7 @@ fun BackupDialog(onDismiss: () -> Unit, onRestored: () -> Unit) {
                             catch (e: Exception) { error = e.message ?: "Не удалось открыть предыдущую копию" }
                             finally { busy = false }
                         }
-                    }) { Text("Вернуть предыдущий дневник") }
+                    }, Modifier.fillMaxWidth(), kind = FitButtonKind.Plain, enabled = !busy)
                     if (busy) CircularProgressIndicator()
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 }

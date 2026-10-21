@@ -14,12 +14,13 @@ import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.dtyan.fitdiary.ui.home.HomeViewModel
 import com.dtyan.fitdiary.ui.measure.MeasurementsViewModel
-import com.dtyan.fitdiary.ui.stats.StatsViewModel
+import com.dtyan.fitdiary.ui.measure.WeightViewModel
 import com.dtyan.fitdiary.ui.workout.ExercisePickerViewModel
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -71,7 +72,7 @@ class OwnershipRaceViewModelTest {
     @Test
     fun queuedWeightWriteKeepsProfileSelectedAtClick() = runTest {
         profiles()
-        val vm = StatsViewModel(context, workouts, nutrition, stats, exercises, measurements)
+        val vm = WeightViewModel(stats)
         vm.addWeight(80.0)
         active.value = 2L
         advanceUntilIdle()
@@ -157,5 +158,31 @@ class OwnershipRaceViewModelTest {
         backgroundScope.launch { vm.uiState.collect { } }
         advanceUntilIdle()
         assertThat(vm.uiState.value.recent.map { it.id }).containsExactly(mineExercise)
+    }
+
+    @Test
+    fun exercisePickerFavoritesBelongToRoutedWorkoutOwner() = runTest {
+        profiles()
+        val bench = exercises.addCustom("Мой жим", "Грудь")
+        val row = exercises.addCustom("Тяга друга", "Спина")
+        exercises.setFavorite(row, true, athleteId = 2L)
+        val mine = workouts.startWorkout(now = 1L, athleteId = 1L)
+        active.value = 2L
+        val vm = ExercisePickerViewModel(exercises, mine, workouts)
+        backgroundScope.launch { vm.uiState.collect { } }
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.favorites).isEmpty()
+
+        vm.toggleFavorite(bench)
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.favorites.map { it.id }).containsExactly(bench)
+        assertThat(vm.uiState.value.recent.map { it.id }).doesNotContain(bench)
+        assertThat(exercises.observeFavoriteIds(1L).first()).containsExactly(bench)
+        assertThat(exercises.observeFavoriteIds(2L).first()).containsExactly(row)
+
+        vm.setOnlyFavorites(true)
+        advanceUntilIdle()
+        assertThat(vm.uiState.value.groups.flatMap { it.second }.map { it.id }).containsExactly(bench)
+        assertThat(vm.uiState.value.favorites).isEmpty()
     }
 }

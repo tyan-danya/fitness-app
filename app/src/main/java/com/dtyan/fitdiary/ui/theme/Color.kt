@@ -32,6 +32,11 @@ data class FitAccents(
     val carbs: Color,
     /** Золото личных рекордов. */
     val gold: Color,
+    /** Текст и иконки на залитых акцентом кнопках раздела. */
+    val onWorkout: Color,
+    val onNutrition: Color,
+    val onMeasure: Color,
+    val onStats: Color,
 )
 
 val LightFitAccents = FitAccents(
@@ -54,6 +59,10 @@ val LightFitAccents = FitAccents(
     fat = Color(0xFFF59E0B),
     carbs = Color(0xFFA855F7),
     gold = Color(0xFFD97706),
+    onWorkout = Color(0xFFFFFFFF),
+    onNutrition = Color(0xFFFFFFFF),
+    onMeasure = Color(0xFFFFFFFF),
+    onStats = Color(0xFFFFFFFF),
 )
 
 val DarkFitAccents = FitAccents(
@@ -76,6 +85,10 @@ val DarkFitAccents = FitAccents(
     fat = Color(0xFFFBBF24),
     carbs = Color(0xFFC084FC),
     gold = Color(0xFFFACC15),
+    onWorkout = Color(0xFF052E16),
+    onNutrition = Color(0xFF3D2400),
+    onMeasure = Color(0xFF042F2E),
+    onStats = Color(0xFF2A1065),
 )
 
 val LocalFitAccents = staticCompositionLocalOf { LightFitAccents }

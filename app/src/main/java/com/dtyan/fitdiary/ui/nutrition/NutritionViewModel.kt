@@ -416,13 +416,7 @@ class NutritionViewModel(
     }
 
     fun updateAiSettings(baseUrl: String, model: String, apiKey: String) {
-        settingsStore.update {
-            it.copy(
-                aiBaseUrl = baseUrl.trim().ifBlank { SettingsStore.DEFAULT_AI_BASE_URL },
-                aiModel = model.trim().ifBlank { SettingsStore.DEFAULT_AI_MODEL },
-                aiApiKey = apiKey.trim(),
-            )
-        }
+        settingsStore.updateAiConnection(baseUrl, model, apiKey)
     }
 
     // --- Файл-обмен для расчёта «вручную через ассистента» ---

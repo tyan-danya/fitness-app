@@ -11,18 +11,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,22 +28,24 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Meal
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.EmptyState
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
+import com.dtyan.fitdiary.ui.common.WorkoutSummaryCard
 import com.dtyan.fitdiary.ui.common.Format
 import com.dtyan.fitdiary.ui.common.IllustrationDumbbell
 import com.dtyan.fitdiary.ui.common.IllustrationSalad
 import com.dtyan.fitdiary.ui.common.SectionHeader
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import java.time.LocalDate
-import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DayDetailsScreen(
     epochDay: Long,
     onOpenWorkout: (Long) -> Unit,
     onBack: () -> Unit,
-) {
+) = FitSectionScope(FitSection.STATS) {
     val container = LocalContext.current.appContainer
     val vm: DayDetailsViewModel = viewModel {
         DayDetailsViewModel(
@@ -64,15 +61,7 @@ fun DayDetailsScreen(
         // Отступы системных панелей уже применяет внешний Scaffold в AppRoot — иначе они удвоятся
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text(Format.dateWithDayOfWeek(LocalDate.ofEpochDay(epochDay))) },
-                windowInsets = WindowInsets(0.dp),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-            )
+            DetailTopBar(title = Format.dateWithDayOfWeek(LocalDate.ofEpochDay(epochDay)), onBack = onBack)
         },
     ) { innerPadding ->
         LazyColumn(
@@ -82,7 +71,7 @@ fun DayDetailsScreen(
         ) {
             item(key = "workouts_header") {
                 SectionHeader(
-                    icon = Icons.Filled.FitnessCenter,
+                    icon = Icons.Rounded.FitnessCenter,
                     title = "Тренировки",
                     iconTint = fitAccents.workout,
                     iconContainer = fitAccents.workoutContainer,
@@ -106,7 +95,7 @@ fun DayDetailsScreen(
 
             item(key = "meals_header") {
                 SectionHeader(
-                    icon = Icons.Filled.Restaurant,
+                    icon = Icons.Rounded.Restaurant,
                     title = "Питание",
                     iconTint = fitAccents.nutrition,
                     iconContainer = fitAccents.nutritionContainer,
@@ -203,7 +192,4 @@ private fun MealsCard(meals: List<Meal>) {
     }
 }
 
-private val RU = Locale("ru")
-
-/** «1 850» — разряды через пробел, как принято в русской типографике. */
-private fun formatKcal(value: Int): String = String.format(RU, "%,d", value)
+private fun formatKcal(value: Int): String = Format.kcal(value)

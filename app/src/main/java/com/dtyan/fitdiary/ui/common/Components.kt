@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,51 +45,28 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** Эмодзи группы мышц — единый словарь для всех экранов. */
-fun muscleGroupEmoji(group: String): String = when (group) {
-    "Грудь" -> "🏋️"
-    "Спина" -> "🧗"
-    "Ноги" -> "🦵"
-    "Плечи" -> "🤸"
-    "Бицепс" -> "💪"
-    "Трицепс" -> "🥊"
-    "Пресс" -> "🔥"
-    else -> "⭐"
-}
-
-/** Заголовок секции: эмодзи + жирный текст. */
-@Composable
-fun SectionHeader(emoji: String, title: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.padding(top = 8.dp, bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(emoji, style = MaterialTheme.typography.titleLarge)
-        Text(title, style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-/** Заголовок секции: иконка в цветной плашке + жирный текст (вместо эмодзи). */
+/** Заголовок секции: иконка в плашке цвета раздела + жирный текст; справа — необязательное действие. */
 @Composable
 fun SectionHeader(
     icon: ImageVector,
     title: String,
     modifier: Modifier = Modifier,
-    iconTint: Color = MaterialTheme.colorScheme.primary,
-    iconContainer: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    iconTint: Color = sectionColors().accent,
+    iconContainer: Color = sectionColors().container,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Row(
-        modifier = modifier.padding(top = 8.dp, bottom = 4.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 40.dp).padding(top = 8.dp, bottom = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -105,35 +83,8 @@ fun SectionHeader(
                     .size(18.dp),
             )
         }
-        Text(title, style = MaterialTheme.typography.titleLarge)
-    }
-}
-
-/** Компактная карточка-метрика: эмодзи, крупное значение, подпись. */
-@Composable
-fun StatChip(
-    emoji: String,
-    value: String,
-    label: String,
-    modifier: Modifier = Modifier,
-    container: Color = MaterialTheme.colorScheme.surfaceContainer,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        color = container,
-        contentColor = contentColor,
-    ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text(emoji, style = MaterialTheme.typography.titleMedium)
-            Text(value, style = MaterialTheme.typography.headlineSmall, maxLines = 1)
-            Text(
-                label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
+        if (action != null) action()
     }
 }
 
@@ -215,34 +166,6 @@ fun ProgressRing(
             }
         }
         content()
-    }
-}
-
-/** Дружелюбное пустое состояние: крупный эмодзи + заголовок + подпись. */
-@Composable
-fun EmptyState(
-    emoji: String,
-    title: String,
-    subtitle: String? = null,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(emoji, fontSize = 44.sp)
-        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-        if (subtitle != null) {
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
     }
 }
 

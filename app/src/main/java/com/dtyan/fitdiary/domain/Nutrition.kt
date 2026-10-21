@@ -9,11 +9,11 @@ import kotlin.math.roundToInt
  * но пользователь может перенести приём в другую группу вручную.
  * Хранится в БД по имени константы (Room конвертирует enum в TEXT).
  */
-enum class MealType(val title: String, val emoji: String) {
-    BREAKFAST("Завтрак", "🌅"),
-    LUNCH("Обед", "☀️"),
-    DINNER("Ужин", "🌙"),
-    SNACK("Перекус", "🍎");
+enum class MealType(val title: String) {
+    BREAKFAST("Завтрак"),
+    LUNCH("Обед"),
+    DINNER("Ужин"),
+    SNACK("Перекус");
 
     companion object {
         /**

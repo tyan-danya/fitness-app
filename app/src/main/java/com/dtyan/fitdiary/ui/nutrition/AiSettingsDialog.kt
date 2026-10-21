@@ -7,8 +7,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,7 +69,7 @@ fun AiSettingsDialog(
                     trailingIcon = {
                         IconButton(onClick = { showKey = !showKey }) {
                             Icon(
-                                imageVector = if (showKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                imageVector = if (showKey) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                                 contentDescription = if (showKey) "Скрыть ключ" else "Показать ключ",
                             )
                         }

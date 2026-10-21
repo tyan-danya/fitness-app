@@ -2,10 +2,13 @@ package com.dtyan.fitdiary.data.repo
 
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseDao
+import com.dtyan.fitdiary.data.db.FavoriteExercise
 import com.dtyan.fitdiary.data.db.WorkoutSetDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 class ExerciseRepository(
     private val exerciseDao: ExerciseDao,
@@ -52,4 +55,19 @@ class ExerciseRepository(
     }
 
     suspend fun setWeightStep(exerciseId: Long, stepKg: Double) = updateWeightStep(exerciseId, stepKg)
+
+    /**
+     * id избранных упражнений профиля (в порядке добавления). Профиль фиксируется
+     * в момент вызова: при смене активного профиля нужно подписаться заново.
+     */
+    fun observeFavoriteIds(athleteId: Long = activeAthleteId.value): Flow<Set<Long>> =
+        exerciseDao.observeFavoriteIds(athleteId).map { it.toSet() }.distinctUntilChanged()
+
+    /** Отметить/снять избранное. Идемпотентно: повтор не меняет время добавления и не падает. */
+    suspend fun setFavorite(exerciseId: Long, favorite: Boolean, athleteId: Long = activeAthleteId.value) {
+        require(athleteId > 0) { "Профиль не выбран" }
+        require(exerciseId > 0) { "Упражнение не выбрано" }
+        if (favorite) exerciseDao.insertFavorite(FavoriteExercise(athleteId, exerciseId, System.currentTimeMillis()))
+        else exerciseDao.deleteFavorite(athleteId, exerciseId)
+    }
 }

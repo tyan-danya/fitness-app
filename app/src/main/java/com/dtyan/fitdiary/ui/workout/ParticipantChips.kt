@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -30,7 +30,7 @@ fun ParticipantChips(
                 enabled = enabled && workout.endedAt == null,
                 onClick = { onSelect(workout.id) },
                 label = { Text((names[workout.athleteId] ?: "Участник") + if (workout.endedAt != null) " · завершил" else "") },
-                leadingIcon = if (workout.id == selectedId) ({ Icon(Icons.Filled.Check, contentDescription = null) }) else null,
+                leadingIcon = if (workout.id == selectedId) ({ Icon(Icons.Rounded.Check, contentDescription = null) }) else null,
             )
         }
     }

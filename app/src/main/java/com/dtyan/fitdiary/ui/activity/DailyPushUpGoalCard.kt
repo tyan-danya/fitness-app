@@ -7,7 +7,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Flag
+import androidx.compose.material.icons.rounded.LocalFireDepartment
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -18,6 +26,13 @@ import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.domain.DailyPushUpProgress
 import com.dtyan.fitdiary.domain.DailyPushUpStreak
 import com.dtyan.fitdiary.domain.DailyPushUps
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitCard
+import com.dtyan.fitdiary.ui.common.IconBadge
+import com.dtyan.fitdiary.ui.common.StatusPill
+import com.dtyan.fitdiary.ui.common.sectionColors
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -32,43 +47,57 @@ internal fun DailyPushUpGoalCard(
 ) {
     val target = progress.target.takeIf { isToday }
     val uncounted = (progress.totalReps - progress.cleanReps).coerceAtLeast(0)
-    Surface(Modifier.fillMaxWidth().testTag("daily-pushup-card"), shape = MaterialTheme.shapes.large, tonalElevation = 2.dp) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Отжимания за день", style = MaterialTheme.typography.titleMedium)
+    val colors = sectionColors()
+    FitCard(Modifier.testTag("daily-pushup-card"), spacing = 6.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                IconBadge(Icons.Rounded.LocalFireDepartment, size = 36.dp)
+                Text("Отжимания за день", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            }
             Text(if (target == null) "${progress.cleanReps} повторов засчитано" else "${progress.cleanReps} / $target повторов",
-                style = MaterialTheme.typography.headlineSmall,
+                style = MaterialTheme.typography.headlineSmall, color = colors.accent,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
-            Text("Подходов: ${progress.setCount}", style = MaterialTheme.typography.bodySmall)
+            Text("Подходов: ${progress.setCount}", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (uncounted > 0) Text("Ещё $uncounted повторов с поправкой на технику — в истории, без зачёта в цель.",
                 style = MaterialTheme.typography.bodySmall)
             if (!isToday) {
                 Text("Цель настраивается для сегодняшнего дня", style = MaterialTheme.typography.bodySmall)
             } else {
                 if (target != null) {
-                    LinearProgressIndicator(progress = { progress.fraction }, modifier = Modifier.fillMaxWidth().testTag("daily-pushup-progress"))
+                    LinearProgressIndicator(progress = { progress.fraction },
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape).testTag("daily-pushup-progress"),
+                        color = colors.accent, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh, gapSize = 0.dp,
+                        drawStopIndicator = {})
                     Text(if (progress.reached) "Цель достигнута" else "Осталось: ${progress.remaining ?: 0} повторов",
                         style = MaterialTheme.typography.bodyMedium)
                     streak?.takeIf { it.target == target }?.let { series ->
                         Column(Modifier.testTag("daily-pushup-streak"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Дни по ${series.target}+ повторов", style = MaterialTheme.typography.titleSmall)
-                            Text("Текущая серия: ${series.currentDays} дн.", style = MaterialTheme.typography.bodyMedium)
-                            Text("Лучшая серия: ${series.bestDays} дн.", style = MaterialTheme.typography.bodySmall)
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                StatusPill("Текущая серия: ${series.currentDays} дн.", icon = Icons.Rounded.LocalFireDepartment,
+                                    container = colors.container, contentColor = colors.onContainer)
+                                StatusPill("Лучшая серия: ${series.bestDays} дн.", icon = Icons.Rounded.EmojiEvents)
+                            }
                             if (!series.todayReached && series.currentDays > 0) Text(
                                 "Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.",
-                                style = MaterialTheme.typography.bodySmall)
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 } else Text("Цель не задана", style = MaterialTheme.typography.bodySmall)
-                Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall)
+                Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onRecord, enabled = !busy && canRecord,
-                    modifier = Modifier.testTag("daily-pushup-record")) { Text("Записать подход") }
-                if (isToday) TextButton(onClick = onEditGoal, enabled = !busy) {
-                    Text(if (target == null) "Цель на день" else "Изменить цель")
-                }
-            }
-        }
+            FitButtonRow(
+                minWidthForRow = 320.dp,
+                first = { m ->
+                    FitButton("Записать подход", onRecord, m.testTag("daily-pushup-record"), kind = FitButtonKind.Tonal,
+                        compact = true, icon = Icons.Rounded.Add, enabled = !busy && canRecord)
+                },
+                second = { m ->
+                    if (isToday) FitButton(if (target == null) "Цель на день" else "Изменить цель", onEditGoal, m,
+                        kind = FitButtonKind.Plain, compact = true, icon = Icons.Rounded.Flag, enabled = !busy)
+                },
+            )
     }
 }
 
@@ -106,7 +135,7 @@ internal fun DailyPushUpGoalDialog(
                 Text("Лестница отдельного упражнения сравнивает один подход; эта цель — сумму за день.",
                     style = MaterialTheme.typography.bodySmall)
                 Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall)
-                if (target != null) TextButton(onClick = onClear, enabled = !busy) { Text("Убрать цель") }
+                if (target != null) FitButton("Убрать цель", onClear, kind = FitButtonKind.Danger, compact = true, enabled = !busy)
             }
         },
         confirmButton = { TextButton(onClick = {

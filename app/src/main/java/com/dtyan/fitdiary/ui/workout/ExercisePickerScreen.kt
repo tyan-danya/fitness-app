@@ -19,21 +19,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -41,10 +40,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,11 +62,19 @@ import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseSeed
 import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.EmptyState
 import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
+import com.dtyan.fitdiary.ui.common.FavoriteToggle
+import com.dtyan.fitdiary.ui.common.FitDimens
+import com.dtyan.fitdiary.ui.common.FitFab
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.IllustrationSearch
 import com.dtyan.fitdiary.ui.common.SectionHeader
+import com.dtyan.fitdiary.ui.common.StatusPill
+import com.dtyan.fitdiary.ui.common.sectionColors
 import com.dtyan.fitdiary.ui.common.rememberPhotoPicker
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlinx.coroutines.launch
@@ -82,16 +87,18 @@ fun ExercisePickerScreen(
     workoutId: Long,
     onExerciseChosen: (Long) -> Unit,
     onBack: () -> Unit,
-) {
+) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     val vm: ExercisePickerViewModel = viewModel(key = "exercise_picker_$workoutId") {
         ExercisePickerViewModel(container.exerciseRepository, workoutId, container.workoutRepository)
     }
 
     val uiState by vm.uiState.collectAsStateWithLifecycle()
+    val favoriteError by vm.error.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var selectedEquipment by rememberSaveable { mutableStateOf(EQUIPMENT_ALL) }
+    var onlyFavorites by rememberSaveable { mutableStateOf(false) }
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var choosing by remember { mutableStateOf(false) }
     var chooseError by remember { mutableStateOf<String?>(null) }
@@ -109,31 +116,18 @@ fun ExercisePickerScreen(
         }
     }
 
-    // Прокидываем фильтр оборудования в VM (в т.ч. после восстановления state).
+    // Прокидываем фильтры в VM (в т.ч. после восстановления state).
     LaunchedEffect(selectedEquipment) {
         vm.setEquipment(selectedEquipment.takeUnless { it == EQUIPMENT_ALL })
     }
+    LaunchedEffect(onlyFavorites) { vm.setOnlyFavorites(onlyFavorites) }
     LaunchedEffect(query) { vm.setQuery(query) }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = { Text("Выбор упражнения") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-            )
-        },
+        topBar = { DetailTopBar(title = "Выбор упражнения", onBack = onBack) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreateDialog = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("Создать упражнение") },
-            )
+            FitFab("Создать упражнение", Icons.Rounded.Add, onClick = { showCreateDialog = true })
         },
     ) { padding ->
         Column(
@@ -141,7 +135,9 @@ fun ExercisePickerScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            chooseError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+            (chooseError ?: favoriteError)?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             // Поиск-пилюля.
             OutlinedTextField(
                 value = query,
@@ -151,31 +147,40 @@ fun ExercisePickerScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = MaterialTheme.shapes.extraLarge,
                 placeholder = { Text("Найти упражнение…") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         IconButton(onClick = {
                             query = ""
                             vm.setQuery("")
                         }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Очистить")
+                            Icon(Icons.Rounded.Close, contentDescription = "Очистить")
                         }
                     }
                 },
                 singleLine = true,
             )
 
-            // Фильтр по виду оборудования: «Все» + типы из каталога.
+            // Фильтры: только избранное, затем вид оборудования.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                FilterChip(
+                    selected = onlyFavorites,
+                    onClick = { onlyFavorites = !onlyFavorites },
+                    label = { Text("Избранное") },
+                    leadingIcon = {
+                        Icon(if (onlyFavorites) Icons.Rounded.Star else Icons.Rounded.StarBorder, contentDescription = null,
+                            tint = fitAccents.gold, modifier = Modifier.size(18.dp))
+                    },
+                )
                 (listOf(EQUIPMENT_ALL) + ExerciseSeed.EQUIPMENT_TYPES).forEach { type ->
                     FilterChip(
                         selected = selectedEquipment == type,
@@ -188,24 +193,29 @@ fun ExercisePickerScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 // Отступ снизу — чтобы FAB не перекрывал последние элементы.
-                contentPadding = PaddingValues(bottom = 96.dp),
+                contentPadding = PaddingValues(bottom = FitDimens.FabClearance),
             ) {
-                if (uiState.recent.isNotEmpty()) {
-                    item(key = "header_recent") {
+                if (uiState.favorites.isNotEmpty()) {
+                    item(key = "header_favorites") {
                         SectionHeader(
-                            icon = Icons.Filled.Bolt,
-                            title = "Недавние",
+                            icon = Icons.Rounded.Star,
+                            title = "Избранное",
                             modifier = Modifier.padding(horizontal = 16.dp),
-                            iconTint = fitAccents.workout,
-                            iconContainer = fitAccents.workoutContainer,
+                            iconTint = fitAccents.gold,
                         )
                     }
+                    items(uiState.favorites, key = { "favorite_${it.id}" }) { exercise ->
+                        ExerciseRow(exercise, showGroup = true, favorite = true, onToggleFavorite = { vm.toggleFavorite(exercise.id) },
+                            onClick = { choose(exercise.id) })
+                    }
+                }
+                if (uiState.recent.isNotEmpty()) {
+                    item(key = "header_recent") {
+                        SectionHeader(icon = Icons.Rounded.History, title = "Недавние", modifier = Modifier.padding(horizontal = 16.dp))
+                    }
                     items(uiState.recent, key = { "recent_${it.id}" }) { exercise ->
-                        ExerciseRow(
-                            exercise = exercise,
-                            showGroup = true,
-                            onClick = { choose(exercise.id) },
-                        )
+                        ExerciseRow(exercise, showGroup = true, favorite = false, onToggleFavorite = { vm.toggleFavorite(exercise.id) },
+                            onClick = { choose(exercise.id) })
                     }
                 }
 
@@ -213,30 +223,25 @@ fun ExercisePickerScreen(
                     item(key = "header_$group") {
                         Text(
                             text = group,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = 12.dp,
-                                bottom = 4.dp,
-                            ),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
                         )
                     }
                     items(exercises, key = { it.id }) { exercise ->
-                        ExerciseRow(
-                            exercise = exercise,
-                            showGroup = false,
-                            onClick = { choose(exercise.id) },
-                        )
+                        ExerciseRow(exercise, showGroup = false, favorite = exercise.id in uiState.favoriteIds,
+                            onToggleFavorite = { vm.toggleFavorite(exercise.id) }, onClick = { choose(exercise.id) })
                     }
                 }
 
-                val filterActive = query.isNotBlank() || selectedEquipment != EQUIPMENT_ALL
-                if (filterActive && uiState.recent.isEmpty() && uiState.groups.isEmpty()) {
+                val filterActive = query.isNotBlank() || selectedEquipment != EQUIPMENT_ALL || onlyFavorites
+                if (filterActive && uiState.favorites.isEmpty() && uiState.recent.isEmpty() && uiState.groups.isEmpty()) {
                     item(key = "empty") {
+                        val noFavorites = onlyFavorites && query.isBlank()
                         EmptyState(
-                            title = "Ничего не найдено",
-                            subtitle = "Попробуйте другое название — или создайте своё",
+                            title = if (noFavorites) "Избранного пока нет" else "Ничего не найдено",
+                            subtitle = if (noFavorites) "Отмечайте любимые упражнения звёздочкой — они будут сверху"
+                                else "Попробуйте другое название — или создайте своё",
                             illustration = { IllustrationSearch() },
                         )
                     }
@@ -266,43 +271,39 @@ fun ExercisePickerScreen(
 private fun ExerciseRow(
     exercise: Exercise,
     showGroup: Boolean,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .clickable(onClickLabel = "Добавить в тренировку", onClick = onClick)
+            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ExerciseGuideThumb(ExerciseGuides.forExercise(exercise), exercise.photoPath, size = 56.dp, displayName = exercise.name)
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = exercise.name,
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = if (showGroup) "${exercise.muscleGroup} · ${exercise.equipment}" else exercise.equipment,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (exercise.isCustom) {
-            Surface(
-                shape = CircleShape,
-                color = fitAccents.workoutContainer,
-                contentColor = fitAccents.onWorkoutContainer,
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "своё",
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    text = if (showGroup) "${exercise.muscleGroup} · ${exercise.equipment}" else exercise.equipment,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (exercise.isCustom) {
+                    val colors = sectionColors()
+                    StatusPill("своё", container = colors.container, contentColor = colors.onContainer)
+                }
             }
         }
+        FavoriteToggle(favorite, onToggleFavorite, exercise.name)
     }
 }
 
@@ -392,10 +393,10 @@ private fun CreateExerciseDialog(
                 if (photo == null) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalIconButton(onClick = { photoPicker.launchCamera() }) {
-                            Icon(Icons.Filled.PhotoCamera, contentDescription = "Камера")
+                            Icon(Icons.Rounded.PhotoCamera, contentDescription = "Камера")
                         }
                         FilledTonalIconButton(onClick = { photoPicker.launchGallery() }) {
-                            Icon(Icons.Filled.Image, contentDescription = "Галерея")
+                            Icon(Icons.Rounded.Image, contentDescription = "Галерея")
                         }
                     }
                 } else {
@@ -420,7 +421,7 @@ private fun CreateExerciseDialog(
                                 scope.launch { photoStore.delete(photo) }
                             },
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = "Убрать фото")
+                            Icon(Icons.Rounded.Close, contentDescription = "Убрать фото")
                         }
                     }
                 }
@@ -428,7 +429,7 @@ private fun CreateExerciseDialog(
         },
         confirmButton = {
             val group = selectedGroup
-            Button(
+            TextButton(
                 onClick = { group?.let { onCreate(name.trim(), it, selectedEquipment, pendingPhotoPath) } },
                 enabled = name.isNotBlank() && group != null,
             ) {

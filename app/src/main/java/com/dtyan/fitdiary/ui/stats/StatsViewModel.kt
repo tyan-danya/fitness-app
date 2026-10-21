@@ -1,53 +1,32 @@
 package com.dtyan.fitdiary.ui.stats
 
-import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseSetPoint
-import com.dtyan.fitdiary.data.db.WeightEntry
 import com.dtyan.fitdiary.data.db.WorkoutSummary
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
-import com.dtyan.fitdiary.data.repo.MeasurementRepository
 import com.dtyan.fitdiary.data.repo.NutritionRepository
 import com.dtyan.fitdiary.data.repo.StatsRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
-import com.dtyan.fitdiary.data.repo.ActivityRepository
-import com.dtyan.fitdiary.export.ExportManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.temporal.WeekFields
 
-enum class ExportFormat { JSON, CSV }
-
 /** Данные календаря месяца: дни с тренировками и дни с записями питания. */
 data class CalendarUiState(
     val workoutDays: Set<LocalDate> = emptySet(),
     val mealDays: Set<LocalDate> = emptySet(),
-)
-
-/** Карточка веса: текущий замер, дельта за 30 дней, точки для графика за 90 дней. */
-data class WeightUiState(
-    val current: WeightEntry? = null,
-    val delta30d: Double? = null,
-    val chartPoints: List<Pair<Long, Double>> = emptyList(),
 )
 
 /** Столбик тоннажа одной ISO-недели (по дате понедельника). */
@@ -65,23 +44,11 @@ data class ExerciseProgressUiState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StatsViewModel(
-    appContext: Context,
     private val workoutRepository: WorkoutRepository,
     private val nutritionRepository: NutritionRepository,
     private val statsRepository: StatsRepository,
     exerciseRepository: ExerciseRepository,
-    measurementRepository: MeasurementRepository? = null,
-    activityRepository: ActivityRepository? = null,
 ) : ViewModel() {
-
-    private val exportManager = ExportManager(
-        context = appContext.applicationContext,
-        workoutRepository = workoutRepository,
-        nutritionRepository = nutritionRepository,
-        statsRepository = statsRepository,
-        measurementRepository = measurementRepository,
-        activityRepository = activityRepository,
-    )
 
     private val zone: ZoneId = ZoneId.systemDefault()
     private val started = SharingStarted.WhileSubscribed(5_000)
@@ -114,30 +81,6 @@ class StatsViewModel(
         return CalendarUiState(workoutDays = workoutDays, mealDays = mealDays)
     }
 
-    // ---------- Вес ----------
-
-    val weight: StateFlow<WeightUiState> = statsRepository.observeWeightHistory()
-        .map { entries -> buildWeightState(entries, System.currentTimeMillis()) }
-        .stateIn(viewModelScope, started, WeightUiState())
-
-    fun addWeight(weightKg: Double) {
-        val owner = statsRepository.currentAthleteId
-        val timestamp = System.currentTimeMillis()
-        viewModelScope.launch { statsRepository.addWeightEntry(weightKg, now = timestamp, athleteId = owner) }
-    }
-
-    private fun buildWeightState(entries: List<WeightEntry>, now: Long): WeightUiState {
-        if (entries.isEmpty()) return WeightUiState()
-        val current = entries.last() // DAO отдаёт по возрастанию timestamp
-        val monthAgo = now - 30L * 24 * 60 * 60 * 1000
-        // База для дельты: последний замер не позже 30 дней назад, иначе самый ранний
-        val baseline = entries.lastOrNull { it.timestamp <= monthAgo } ?: entries.first()
-        val delta = if (entries.size >= 2) current.weightKg - baseline.weightKg else null
-        val from90 = now - 90L * 24 * 60 * 60 * 1000
-        val points = entries.filter { it.timestamp >= from90 }.map { it.timestamp to it.weightKg }
-        return WeightUiState(current = current, delta30d = delta, chartPoints = points)
-    }
-
     // ---------- Тоннаж по неделям ----------
 
     val weeklyVolume: StateFlow<List<WeekVolumeBar>> =
@@ -161,8 +104,14 @@ class StatsViewModel(
 
     // ---------- Прогресс упражнения ----------
 
-    val exercises: StateFlow<List<Exercise>> = exerciseRepository.observeExercises()
-        .stateIn(viewModelScope, started, emptyList())
+    /** Каталог для выбора упражнения; избранные участника — первыми. */
+    val exercises: StateFlow<List<Exercise>> =
+        combine(exerciseRepository.observeExercises(), exerciseRepository.observeFavoriteIds()) { all, favorites ->
+            all.sortedBy { if (it.id in favorites) 0 else 1 }
+        }.stateIn(viewModelScope, started, emptyList())
+
+    val favoriteIds: StateFlow<Set<Long>> = exerciseRepository.observeFavoriteIds()
+        .stateIn(viewModelScope, started, emptySet())
 
     private val _selectedExercise = MutableStateFlow<Exercise?>(null)
     val selectedExercise: StateFlow<Exercise?> = _selectedExercise.asStateFlow()
@@ -199,36 +148,4 @@ class StatsViewModel(
 
     val history: StateFlow<List<WorkoutSummary>> = workoutRepository.observeFinishedSummaries()
         .stateIn(viewModelScope, started, emptyList())
-
-    // ---------- Экспорт ----------
-
-    private val _exporting = MutableStateFlow(false)
-    val exporting: StateFlow<Boolean> = _exporting.asStateFlow()
-
-    private val _exportIntents = Channel<Intent>(Channel.BUFFERED)
-    /** Готовые share-интенты: composable запускает их через context.startActivity. */
-    val exportIntents: Flow<Intent> = _exportIntents.receiveAsFlow()
-    private val _errors = Channel<String>(Channel.BUFFERED)
-    val errors: Flow<String> = _errors.receiveAsFlow()
-
-    fun export(format: ExportFormat) {
-        if (_exporting.value) return
-        val owner = statsRepository.currentAthleteId
-        _exporting.value = true
-        viewModelScope.launch {
-            try {
-                val intent = when (format) {
-                    ExportFormat.JSON -> exportManager.exportJson(athleteId = owner)
-                    ExportFormat.CSV -> exportManager.exportCsv(athleteId = owner)
-                }
-                _exportIntents.send(intent)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                _errors.send(error.message ?: "Не удалось подготовить экспорт")
-            } finally {
-                _exporting.value = false
-            }
-        }
-    }
 }

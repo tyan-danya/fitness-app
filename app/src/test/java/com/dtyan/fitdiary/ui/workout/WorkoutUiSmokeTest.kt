@@ -163,17 +163,17 @@ class WorkoutUiSmokeTest {
         waitForText("Кто тренируется?")
         compose.onNodeWithText("Миша").performClick()
         compose.onAllNodesWithText("Начать по программе").onLast().performClick()
-        waitForText("Открыть следующее: Жим лёжа")
-        compose.onNodeWithText("План: 0 из 2 упражнений выполнено").assertExists()
+        waitForText("Следующее: Жим лёжа")
+        compose.onNodeWithText("План: 0 из 2").assertExists()
         capture("guided-workout-320dp-font130")
-        compose.onNodeWithText("Открыть следующее: Жим лёжа").performScrollTo().performClick()
+        compose.onNodeWithText("Следующее: Жим лёжа").performScrollTo().performClick()
         waitForText("Подход для: Даня")
         // Participant identity is rendered before Room emits the exercise plan. Wait for
         // that independent query before scrolling to the conditionally inserted action.
         waitForText("План: упражнение 1 из 2")
-        compose.onNodeWithText("Подходы: 3 · Повторы: 8").assertExists()
-        compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено → следующее"))
-        compose.onNodeWithText("Упражнение выполнено → следующее").assertIsNotEnabled()
+        compose.onNodeWithText("Цель: 3 подхода по 8").assertExists()
+        compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено, дальше"))
+        compose.onNodeWithText("Упражнение выполнено, дальше").assertIsNotEnabled()
         compose.onNode(hasSetTextAction() and hasText("Вес, кг")).performScrollTo().performTextReplacement("41")
         compose.onNode(hasSetTextAction() and hasText("Повторы")).performTextReplacement("6")
         compose.onNodeWithText("Записать · Даня").performScrollTo().assertIsEnabled().assertIsDisplayed()
@@ -196,11 +196,11 @@ class WorkoutUiSmokeTest {
         try {
             // Scroll the lazy container to discover virtualized rows; performScrollTo on a
             // text node only works while that row is already composed in the viewport.
-            compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено → следующее"))
-            compose.onNodeWithText("Упражнение выполнено → следующее").assertIsEnabled().assertIsDisplayed()
+            compose.onNodeWithTag("exercise-log-list").performScrollToNode(hasText("Упражнение выполнено, дальше"))
+            compose.onNodeWithText("Упражнение выполнено, дальше").assertIsEnabled().assertIsDisplayed()
             File("build/ui-renders/guided-completion-semantics.txt").writeText(compose.onRoot().printToString())
             capture("guided-exercise-320dp-font130")
-            compose.onNodeWithText("Упражнение выполнено → следующее").performClick()
+            compose.onNodeWithText("Упражнение выполнено, дальше").performClick()
             waitForText("Тяга блока")
         } catch (failure: Throwable) {
             capture("guided-completion-failure-320dp-font130")

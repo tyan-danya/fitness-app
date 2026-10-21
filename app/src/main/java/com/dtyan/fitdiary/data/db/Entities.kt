@@ -172,6 +172,22 @@ data class WorkoutTemplate(
     val name: String,
 )
 
+/** Избранное упражнение профиля. Каталог общий, а избранное у каждого своё. */
+@Entity(
+    tableName = "favorite_exercises",
+    primaryKeys = ["athleteId", "exerciseId"],
+    foreignKeys = [
+        ForeignKey(entity = Athlete::class, parentColumns = ["id"], childColumns = ["athleteId"]),
+        ForeignKey(entity = Exercise::class, parentColumns = ["id"], childColumns = ["exerciseId"]),
+    ],
+    indices = [Index("exerciseId")],
+)
+data class FavoriteExercise(
+    val athleteId: Long,
+    val exerciseId: Long,
+    val createdAt: Long,
+)
+
 @Entity(
     tableName = "template_exercises",
     primaryKeys = ["templateId", "exerciseId"],

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -19,26 +18,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
@@ -52,7 +46,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.data.db.Meal
 import com.dtyan.fitdiary.domain.MealType
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
 import com.dtyan.fitdiary.ui.common.Format
+import com.dtyan.fitdiary.ui.common.icon
 import com.dtyan.fitdiary.ui.common.pressScale
 import com.dtyan.fitdiary.ui.theme.fitAccents
 import kotlinx.coroutines.launch
@@ -122,7 +119,8 @@ fun MealEditorSheet(
                     FilterChip(
                         selected = state.mealType == type,
                         onClick = { actions.onMealTypeChange(type) },
-                        label = { Text("${type.emoji} ${type.title}") },
+                        label = { Text(type.title) },
+                        leadingIcon = { Icon(type.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = fitAccents.nutritionContainer,
                             selectedLabelColor = fitAccents.onNutritionContainer,
@@ -224,30 +222,19 @@ fun MealEditorSheet(
             }
 
             // Расчёт через ИИ: кнопка + статус; без ключа ведёт в настройки
-            Row(
+            FitButton(
+                text = when {
+                    state.estimating -> "Считаем…"
+                    aiConfigured -> "Рассчитать через ИИ"
+                    else -> "Настроить расчёт через ИИ"
+                },
+                onClick = { if (aiConfigured) actions.onEstimateAi() else actions.onOpenAiSettings() },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(
-                    onClick = { if (aiConfigured) actions.onEstimateAi() else actions.onOpenAiSettings() },
-                    enabled = state.canEstimate,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (state.estimating) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                    }
-                    Text(
-                        text = when {
-                            state.estimating -> "  Считаем…"
-                            aiConfigured -> "  Рассчитать через ИИ"
-                            else -> "  Настроить расчёт через ИИ"
-                        },
-                    )
-                }
-            }
+                kind = FitButtonKind.Outlined,
+                icon = Icons.Rounded.AutoAwesome,
+                loading = state.estimating,
+                enabled = state.canEstimate,
+            )
             state.estimateError?.let { error ->
                 Text(
                     text = error,
@@ -281,34 +268,19 @@ fun MealEditorSheet(
                 }
             }
 
-            Button(
+            FitButton(
+                text = if (state.isNew) "Добавить" else "Сохранить",
                 onClick = {
                     // Лёгкий «щелчок» — приём записан; затем анимация закрытия и сохранение
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     scope.launch { sheetState.hide() }.invokeOnCompletion { actions.onSave() }
                 },
+                modifier = Modifier.fillMaxWidth().pressScale(),
                 enabled = state.canSave && !state.estimating,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .pressScale(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = fitAccents.nutrition,
-                    contentColor = MaterialTheme.colorScheme.onSecondary,
-                ),
-            ) {
-                Text(
-                    text = if (state.isNew) "Добавить" else "Сохранить",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
+            )
             if (!state.canSave && state.name.isNotBlank()) {
-                TextButton(
-                    onClick = { actions.onEstimateLaterChange(true) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Не знаю КБЖУ — сохранить и рассчитать позже")
-                }
+                FitButton("Не знаю КБЖУ — сохранить и рассчитать позже", { actions.onEstimateLaterChange(true) },
+                    Modifier.fillMaxWidth(), kind = FitButtonKind.Plain)
             }
         }
     }
@@ -326,7 +298,7 @@ private fun MiniSectionLabel(text: String) {
             color = fitAccents.nutritionContainer,
         ) {
             Icon(
-                imageVector = Icons.Filled.Bolt,
+                imageVector = Icons.Rounded.History,
                 contentDescription = null,
                 tint = fitAccents.nutrition,
                 modifier = Modifier

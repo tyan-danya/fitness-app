@@ -5,8 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FitnessCenter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,7 +48,7 @@ fun ExerciseGuideThumb(
             if (frame != null) Image(painterResource(frame), contentDescription = null,
                 modifier = Modifier.fillMaxSize().padding(2.dp), contentScale = ContentScale.Fit)
             else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.FitnessCenter, contentDescription = null,
+                Icon(Icons.Rounded.FitnessCenter, contentDescription = null,
                     modifier = Modifier.size(size * 0.5f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -58,10 +59,8 @@ fun ExerciseGuideThumb(
 @Composable
 fun ExerciseGuideButton(guide: ExerciseGuide, photoPath: String? = null, displayName: String = guide.title) {
     var open by rememberSaveable(guide.key, displayName) { mutableStateOf(false) }
-    TextButton(onClick = { open = true },
-        modifier = Modifier.semantics { contentDescription = "Схема и техника: $displayName" }) {
-        Text("Схема и техника")
-    }
+    FitButton("Схема и техника", { open = true }, Modifier.semantics { contentDescription = "Схема и техника: $displayName" },
+        kind = FitButtonKind.Plain, compact = true, icon = Icons.AutoMirrored.Rounded.MenuBook)
     if (open) ExerciseGuideDialog(guide, photoPath, displayName) { open = false }
 }
 
@@ -87,7 +86,7 @@ fun ExerciseGuideDialog(
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 8.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                    IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "Закрыть справку") }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Закрыть справку") }
                 }
                 LazyColumn(Modifier.weight(1f, fill = false).testTag("exercise-guide-content"),
                     contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -139,9 +138,8 @@ fun ExerciseGuideDialog(
                     }
                     if (linkError) item("link_error") { Text("Не удалось открыть ссылку.", color = MaterialTheme.colorScheme.error) }
                 }
-                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                    Text("Закрыть")
-                }
+                FitButton("Закрыть", onDismiss, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    kind = FitButtonKind.Tonal)
             }
         }
     }
