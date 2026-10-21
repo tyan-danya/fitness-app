@@ -16,6 +16,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.dtyan.fitdiary.domain.DailyPushUpProgress
+import com.dtyan.fitdiary.domain.DailyPushUpStreak
 import com.dtyan.fitdiary.domain.DailyPushUps
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -27,6 +28,7 @@ internal fun DailyPushUpGoalCard(
     canRecord: Boolean,
     onRecord: () -> Unit,
     onEditGoal: () -> Unit,
+    streak: DailyPushUpStreak? = null,
 ) {
     val target = progress.target.takeIf { isToday }
     val uncounted = (progress.totalReps - progress.cleanReps).coerceAtLeast(0)
@@ -46,6 +48,16 @@ internal fun DailyPushUpGoalCard(
                     LinearProgressIndicator(progress = { progress.fraction }, modifier = Modifier.fillMaxWidth().testTag("daily-pushup-progress"))
                     Text(if (progress.reached) "Цель достигнута" else "Осталось: ${progress.remaining ?: 0} повторов",
                         style = MaterialTheme.typography.bodyMedium)
+                    streak?.takeIf { it.target == target }?.let { series ->
+                        Column(Modifier.testTag("daily-pushup-streak"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Дни по ${series.target}+ повторов", style = MaterialTheme.typography.titleSmall)
+                            Text("Текущая серия: ${series.currentDays} дн.", style = MaterialTheme.typography.bodyMedium)
+                            Text("Лучшая серия: ${series.bestDays} дн.", style = MaterialTheme.typography.bodySmall)
+                            if (!series.todayReached && series.currentDays > 0) Text(
+                                "Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
                 } else Text("Цель не задана", style = MaterialTheme.typography.bodySmall)
                 Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall)
             }
@@ -80,16 +92,19 @@ internal fun DailyPushUpGoalDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Профиль: $ownerName", style = MaterialTheme.typography.titleSmall)
-                Text("Необязательный ориентир для суммы подходов из раздела «Активность». Складываются стандартные варианты отжиманий с сохранением техники.")
-                Text("Брусья, обратные отжимания и записи тренировок в зале сюда не входят. Лестница отдельного упражнения сравнивает один подход; эта цель — сумму за день.",
-                    style = MaterialTheme.typography.bodySmall)
-                Text("Цель сохраняется и для следующих дней, пока вы её не измените или не уберёте. Автоматически не повышается.", style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(text, { text = it.take(12); attempted = false; onEdit() },
                     label = { Text("Повторов за день") }, enabled = !busy, singleLine = true,
                     isError = validation != null, modifier = Modifier.fillMaxWidth().testTag("daily-pushup-target-input"),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
                 validation?.let { Text(it, color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                Text("Необязательный ориентир на каждый день, пока вы его не измените или не уберёте. Автоматически не повышается.")
+                Text("Смена цели пересчитает текущую и лучшую серии по новому порогу для всей истории.",
+                    style = MaterialTheme.typography.bodyMedium)
+                Text("Складываются стандартные варианты отжиманий с сохранением техники из раздела «Активность». Брусья, обратные отжимания и записи тренировок в зале сюда не входят.",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("Лестница отдельного упражнения сравнивает один подход; эта цель — сумму за день.",
+                    style = MaterialTheme.typography.bodySmall)
                 Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall)
                 if (target != null) TextButton(onClick = onClear, enabled = !busy) { Text("Убрать цель") }
             }

@@ -181,7 +181,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                 item("daily_pushups") {
                     DailyPushUpGoalCard(state.pushUpProgress, isToday = state.epochDay == state.todayEpochDay,
                         busy = busy, canRecord = activePushUps.isNotEmpty(), onRecord = { choosePushUps = true },
-                        onEditGoal = { vm.clearError(); vm.clearMessage(); showDailyGoal = true })
+                        onEditGoal = { vm.clearError(); vm.clearMessage(); showDailyGoal = true }, streak = state.pushUpStreak)
                 }
                 item("quick") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

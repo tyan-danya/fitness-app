@@ -106,6 +106,7 @@ class ActivityViewModelTest {
         advanceUntilIdle()
         assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(12)
         assertThat(screen.state.value.pushUpProgress.reached).isTrue()
+        assertThat(screen.state.value.pushUpStreak!!.currentDays).isEqualTo(2)
         val entry = repo.getAllEntries(1).first { it.clientToken == "narrow-seven" }
         screen.editEntry(entry)
         screen.updateDraft { it.copy(reps = "2") }
@@ -113,6 +114,7 @@ class ActivityViewModelTest {
         advanceUntilIdle()
         assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(7)
         assertThat(screen.state.value.pushUpProgress.remaining).isEqualTo(3)
+        assertThat(screen.state.value.pushUpStreak!!.currentDays).isEqualTo(1)
         screen.deleteEntry(repo.getAllEntries(1).first { it.clientToken == "normal-five" }) {}
         advanceUntilIdle()
         assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(2)
@@ -121,6 +123,7 @@ class ActivityViewModelTest {
         assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(30)
         assertThat(screen.state.value.pushUpProgress.target).isNull()
         assertThat(screen.state.value.pushUpProgress.reached).isFalse()
+        assertThat(screen.state.value.pushUpStreak).isNull()
         screen.saveDailyPushUpGoal("20") {}
         advanceUntilIdle()
         assertThat(screen.error.value).isNotNull()
@@ -135,6 +138,7 @@ class ActivityViewModelTest {
         advanceUntilIdle()
         val normal = repo.getAllDefinitions(1).first { it.key == "pushup_standard" }
         repo.saveEntry(normal.id, ActivityEntryInput(epochDay, reps = 10, clientToken = "before-midnight"), 1)
+        settings.setPushUpDailyGoal(10, 1)
         screen.newEntry(normal.id)
         screen.updateDraft { it.copy(reps = "5") }
         calendarDay++
@@ -143,6 +147,8 @@ class ActivityViewModelTest {
         assertThat(screen.selectedDay.value).isEqualTo(calendarDay)
         assertThat(screen.state.value.todayEpochDay).isEqualTo(calendarDay)
         assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(0)
+        assertThat(screen.state.value.pushUpStreak!!.currentDays).isEqualTo(1)
+        assertThat(screen.state.value.pushUpStreak!!.todayReached).isFalse()
         assertThat(screen.editor.value!!.epochDay).isEqualTo(epochDay)
         screen.saveEntry()
         advanceUntilIdle()

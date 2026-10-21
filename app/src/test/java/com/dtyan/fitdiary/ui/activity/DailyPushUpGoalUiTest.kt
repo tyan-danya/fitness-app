@@ -102,6 +102,7 @@ class DailyPushUpGoalUiTest {
         waitForText("Цель отжиманий на день")
         compose.onNodeWithText("Убрать цель").performScrollTo().performClick()
         waitForText("Цель не задана")
+        compose.onNodeWithTag("daily-pushup-streak").assertDoesNotExist()
         runBlocking(Dispatchers.IO) {
             assertThat(container.settings.observePushUpDailyGoal(1).first()).isNull()
             assertThat(container.activityRepository.getAllEntries(1)).isEmpty()
@@ -153,11 +154,66 @@ class DailyPushUpGoalUiTest {
         showCard()
         compose.onNodeWithText("Цель настраивается для сегодняшнего дня").assertIsDisplayed()
         compose.onNodeWithTag("daily-pushup-progress").assertDoesNotExist()
+        compose.onNodeWithTag("daily-pushup-streak").assertDoesNotExist()
         compose.onNodeWithText("Изменить цель").assertDoesNotExist()
         capture("daily-pushup-history-320dp-font130")
         runBlocking(Dispatchers.IO) {
             assertThat(container.activityRepository.getAllEntries(1)).hasSize(6)
             assertThat(container.database.workoutDao().getActiveOnce(1)).isNull()
+        }
+    }
+
+    @Test fun sevenDayStreakWaitsForToday_thenExtends_andRecalculatesForChangedThreshold() {
+        val day = LocalDate.now().toEpochDay()
+        runBlocking(Dispatchers.IO) {
+            val repo = container.activityRepository
+            repo.ensureDefaults(1)
+            val activityId = repo.getAllDefinitions(1).first { it.key == "pushup_standard" }.id
+            for (daysAgo in 1..7) {
+                repo.saveEntry(activityId, ActivityEntryInput(day - daysAgo, reps = 100, clientToken = "streak-day-$daysAgo"), 1)
+            }
+            repo.saveEntry(activityId, ActivityEntryInput(day - 8, reps = 80, clientToken = "lower-threshold-day"), 1)
+            repeat(9) { index ->
+                repo.saveEntry(activityId, ActivityEntryInput(day, reps = 10, clientToken = "today-set-$index"), 1)
+            }
+            container.settings.setPushUpDailyGoal(100, 1)
+        }
+        render()
+        waitForText("90 / 100 повторов")
+        showCard()
+        compose.onNodeWithText("Дни по 100+ повторов").assertIsDisplayed()
+        compose.onNodeWithText("Текущая серия: 7 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Лучшая серия: 7 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.").assertIsDisplayed()
+        capture("daily-pushup-streak-320dp-font130")
+        compose.onNodeWithTag("daily-pushup-record").performScrollTo().performClick()
+        waitForText("Какой вариант отжиманий?")
+        compose.onNode(hasText("Отжимания — обычная постановка") and hasAnyAncestor(isDialog())).performClick()
+        waitForText("Повторы за один подход")
+        compose.onNode(hasSetTextAction() and hasText("Повторы за один подход")).performTextReplacement("10")
+        compose.onNodeWithText("Сохранить · Даня").performClick()
+        waitForText("100 / 100 повторов")
+        showCard()
+        compose.onNodeWithText("Цель достигнута").assertIsDisplayed()
+        compose.onNodeWithText("Текущая серия: 8 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Лучшая серия: 8 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.").assertDoesNotExist()
+        compose.onNodeWithText("Изменить цель").performScrollTo().performClick()
+        waitForText("Цель отжиманий на день")
+        compose.onNodeWithText("Смена цели пересчитает текущую и лучшую серии по новому порогу для всей истории.")
+            .performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("daily-pushup-target-input").performScrollTo().performTextReplacement("50")
+        compose.onNodeWithText("Сохранить цель").assertIsDisplayed().performClick()
+        waitForText("100 / 50 повторов")
+        showCard()
+        compose.onNodeWithText("Дни по 50+ повторов").assertIsDisplayed()
+        compose.onNodeWithText("Текущая серия: 9 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Лучшая серия: 9 дн.").assertIsDisplayed()
+        compose.onNodeWithText("Дни по 100+ повторов").assertDoesNotExist()
+        capture("daily-pushup-streak-recalculated-320dp-font130")
+        runBlocking(Dispatchers.IO) {
+            assertThat(container.settings.observePushUpDailyGoal(1).first()).isEqualTo(50)
+            assertThat(container.activityRepository.getAllEntries(1)).hasSize(18)
         }
     }
 }

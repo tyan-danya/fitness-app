@@ -39,6 +39,9 @@ data class ActivityUiState(
     val summary get() = activityDaySummary(definitions, dayEntries)
     val pushUpProgress get() = DailyPushUps.calculate(definitions, allEntries, ownerId, epochDay,
         dailyPushUpTarget.takeIf { epochDay == todayEpochDay })
+    val pushUpStreak get() = dailyPushUpTarget?.takeIf { epochDay == todayEpochDay }?.let { target ->
+        DailyPushUps.streak(definitions, allEntries, ownerId, todayEpochDay, target)
+    }
 }
 
 /** All reads, drafts, timers and writes belong to the immutable owner of this screen. */
