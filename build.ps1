@@ -1,4 +1,4 @@
-# Обёртка для сборки: подставляет локальный тулчейн (JDK 17 + Android SDK + Gradle).
+﻿# Обёртка для сборки: подставляет локальный тулчейн (JDK 17 + Android SDK + Gradle).
 # Использование:  .\build.ps1 test
 #                 .\build.ps1 assembleDebug
 param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $GradleArgs)
