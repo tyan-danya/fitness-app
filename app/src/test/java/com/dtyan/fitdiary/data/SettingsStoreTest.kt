@@ -7,11 +7,15 @@ import com.dtyan.fitdiary.domain.MeasurementType
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import org.junit.Before
@@ -92,14 +96,89 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun dailyPushUpGoalsStayWithExplicitOwnerAcrossSwitchesRestartAndUnrelatedUpdates() = runTest {
+        val store = SettingsStore(context, active)
+        val firstValues = mutableListOf<Int?>()
+        val friendValues = mutableListOf<Int?>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.observePushUpDailyGoal(1).collect { firstValues.add(it) }
+        }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.observePushUpDailyGoal(2).collect { friendValues.add(it) }
+        }
+        assertThat(store.settingsFor(1).pushUpDailyGoal).isNull()
+        assertThat(store.settingsFor(2).pushUpDailyGoal).isNull()
+        store.setPushUpDailyGoal(50, 1)
+        active.value = 2L
+        // A pending save for the first owner must not follow the selected profile.
+        store.setPushUpDailyGoal(60, 1)
+        store.setPushUpDailyGoal(100_000, 2)
+        store.update { it.copy(calorieGoal = 1900) }
+        runCurrent()
+        assertThat(firstValues).containsExactly(null, 50, 60).inOrder()
+        assertThat(friendValues).containsExactly(null, 100_000).inOrder()
+        assertThat(store.settings.value.pushUpDailyGoal).isEqualTo(100_000)
+        assertThat(store.settingsFor(1).pushUpDailyGoal).isEqualTo(60)
+
+        val restarted = SettingsStore(context, active)
+        assertThat(restarted.observePushUpDailyGoal(1).first()).isEqualTo(60)
+        assertThat(restarted.observePushUpDailyGoal(2).first()).isEqualTo(100_000)
+        restarted.setPushUpDailyGoal(null, 1)
+        assertThat(restarted.observePushUpDailyGoal(1).first()).isNull()
+        assertThat(restarted.observePushUpDailyGoal(2).first()).isEqualTo(100_000)
+        assertThat(prefs.contains("athlete.1.pushUpDailyGoal")).isFalse()
+        assertThat(prefs.getInt("athlete.2.calorieGoal", 0)).isEqualTo(1900)
+        assertThat(SettingsStore(context).settingsFor(1).pushUpDailyGoal).isNull()
+    }
+
+    @Test
+    fun dailyPushUpGoalBoundsAndOwnersAreValidatedBeforeWriting() = runTest {
+        val store = SettingsStore(context, active)
+        store.setPushUpDailyGoal(1, 1)
+        assertThat(store.observePushUpDailyGoal(1).first()).isEqualTo(1)
+        val before = prefs.all.toMap()
+        for (goal in listOf(-1, 0, 100_001, Int.MAX_VALUE)) {
+            assertThat(runCatching { store.setPushUpDailyGoal(goal, 1) }.isFailure).isTrue()
+            assertThat(prefs.all).isEqualTo(before)
+            assertThat(store.observePushUpDailyGoal(1).first()).isEqualTo(1)
+        }
+        for (owner in listOf(-1L, 0L)) {
+            assertThat(runCatching { store.setPushUpDailyGoal(50, owner) }.isFailure).isTrue()
+            assertThat(runCatching { store.observePushUpDailyGoal(owner) }.isFailure).isTrue()
+            assertThat(prefs.all).isEqualTo(before)
+        }
+    }
+
+    @Test
+    fun oldBackupWithoutDailyGoalsClearsAllProfilesAndNotifiesObservers() = runTest {
+        val store = SettingsStore(context, active)
+        val backup = store.exportSafeSettings()
+        assertThat(backup).doesNotContain("pushUpDailyGoal")
+        val observed = mutableListOf<Int?>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            store.observePushUpDailyGoal(1).collect { observed.add(it) }
+        }
+        store.setPushUpDailyGoal(40, 1)
+        store.setPushUpDailyGoal(90, 2)
+        store.restoreSafeSettings(backup)
+        assertThat(observed).containsExactly(null, 40, null).inOrder()
+        assertThat(store.observePushUpDailyGoal(1).first()).isNull()
+        assertThat(store.observePushUpDailyGoal(2).first()).isNull()
+        assertThat(store.settings.value.pushUpDailyGoal).isNull()
+        assertThat(SettingsStore(context).settingsFor(2).pushUpDailyGoal).isNull()
+    }
+
+    @Test
     fun safeBackupRoundTripsAllProfilesAndDiaryIdentityWithoutAnyAiConnectionData() = runTest {
         val store = SettingsStore(context, active)
         runCurrent()
         store.update { it.copy(calorieGoal = 1800, trackedMeasurements = setOf(MeasurementType.WAIST),
+            pushUpDailyGoal = 75,
             aiApiKey = "test-source-secret", aiBaseUrl = "https://source.example.test/private", aiModel = "private-source-model",
             measurementReminderSinceDay = 20001L) }
         active.value = 2L
         store.update { it.copy(calorieGoal = 3300, proteinGoalG = 190,
+            pushUpDailyGoal = 150,
             trackedMeasurements = setOf(MeasurementType.CHEST, MeasurementType.BICEPS_R),
             measurementReminderDays = 5, measurementReminderHour = 8, measurementReminderSinceDay = 20002L) }
         // Historical or unexpected secret names also must never enter the allow-listed export.
@@ -120,6 +199,7 @@ class SettingsStoreTest {
 
         active.value = 1L
         store.update { it.copy(calorieGoal = 999, aiApiKey = "test-destination-secret",
+            pushUpDailyGoal = null,
             aiBaseUrl = "https://destination.example.test/private", aiModel = "destination-model") }
         prefs.edit().putString("diaryId", UUID.randomUUID().toString()).putInt("athlete.3.calorieGoal", 4444).commit()
         store.restoreSafeSettings(backup)
@@ -132,6 +212,10 @@ class SettingsStoreTest {
         assertThat(store.settingsFor(2L).proteinGoalG).isEqualTo(190)
         assertThat(store.settingsFor(2L).trackedMeasurements).isEqualTo(expectedTwo.trackedMeasurements)
         assertThat(store.settingsFor(2L).measurementReminderSinceDay).isEqualTo(20002L)
+        assertThat(store.settingsFor(1L).pushUpDailyGoal).isEqualTo(75)
+        assertThat(store.observePushUpDailyGoal(1L).first()).isEqualTo(75)
+        assertThat(store.settingsFor(2L).pushUpDailyGoal).isEqualTo(150)
+        assertThat(store.observePushUpDailyGoal(2L).first()).isEqualTo(150)
         assertThat(prefs.contains("athlete.3.calorieGoal")).isFalse()
         assertThat(store.settings.value.aiApiKey).isEqualTo("test-destination-secret")
         assertThat(store.settings.value.aiBaseUrl).isEqualTo("https://destination.example.test/private")
@@ -143,7 +227,7 @@ class SettingsStoreTest {
     fun invalidRestoreNeverPartiallyMutatesPreferencesOrState() = runTest {
         val store = SettingsStore(context, active)
         runCurrent()
-        store.update { it.copy(calorieGoal = 2000, aiApiKey = "test-unchanged-secret") }
+        store.update { it.copy(calorieGoal = 2000, aiApiKey = "test-unchanged-secret", pushUpDailyGoal = 25) }
         val valid = Json.parseToJsonElement(store.exportSafeSettings()).jsonObject
         val beforePrefs = prefs.all.toMap()
         val beforeState = store.settings.value
@@ -152,6 +236,16 @@ class SettingsStoreTest {
             "athlete.1.measurementReminderDays" to JsonPrimitive(0),
             "athlete.1.measurementReminderHour" to JsonPrimitive(24),
             "athlete.1.proteinGoalG" to JsonPrimitive("100"),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive(0),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive(-1),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive(100_001),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive("50"),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive(1.5),
+            "athlete.1.pushUpDailyGoal" to JsonPrimitive(true),
+            "athlete.1.pushUpDailyGoal" to JsonNull,
+            "athlete.0.pushUpDailyGoal" to JsonPrimitive(50),
+            "athlete.9223372036854775808.pushUpDailyGoal" to JsonPrimitive(50),
+            "pushUpDailyGoal" to JsonPrimitive(50),
             "athlete.1.trackedMeasurements" to JsonPrimitive("UNKNOWN_ZONE"),
             "diaryId" to JsonPrimitive("not-a-uuid"),
             "aiApiKey" to JsonPrimitive("untrusted-secret"),
@@ -162,6 +256,7 @@ class SettingsStoreTest {
             assertThat(runCatching { store.restoreSafeSettings(invalid) }.isFailure).isTrue()
             assertThat(prefs.all).isEqualTo(beforePrefs)
             assertThat(store.settings.value).isEqualTo(beforeState)
+            assertThat(store.observePushUpDailyGoal(1L).first()).isEqualTo(25)
         }
     }
 
@@ -177,6 +272,8 @@ class SettingsStoreTest {
             { it.copy(proteinGoalG = -1) },
             { it.copy(measurementReminderDays = 0) },
             { it.copy(measurementReminderHour = 24) },
+            { it.copy(pushUpDailyGoal = 0) },
+            { it.copy(pushUpDailyGoal = 100_001) },
         )
         for (transform in invalid) {
             assertThat(runCatching { store.update(transform) }.isFailure).isTrue()

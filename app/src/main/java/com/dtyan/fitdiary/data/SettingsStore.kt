@@ -1,6 +1,7 @@
 package com.dtyan.fitdiary.data
 
 import android.content.Context
+import com.dtyan.fitdiary.domain.DailyPushUps
 import com.dtyan.fitdiary.domain.MeasurementType
 import java.time.LocalDate
 import java.util.UUID
@@ -10,8 +11,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /** Настройки приложения поверх SharedPreferences, наружу — StateFlow. */
 class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Long> = MutableStateFlow(1L)) {
@@ -33,6 +37,8 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
         val measurementReminderHour: Int = 20,
         /** День (epochDay), с которого считаем тишину, если замеров ещё не было. */
         val measurementReminderSinceDay: Long = LocalDate.now().toEpochDay(),
+        /** Необязательная сумма чистых отжиманий за день, отдельно от рекорда подхода. */
+        val pushUpDailyGoal: Int? = null,
     ) {
         /** Ключ задан — кнопка «Рассчитать» в форме приёма активна. */
         val aiConfigured: Boolean get() = aiApiKey.isNotBlank() && aiBaseUrl.isNotBlank() && aiModel.isNotBlank()
@@ -41,6 +47,7 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
     companion object {
         const val DEFAULT_AI_BASE_URL = "https://api.openai.com/v1"
         const val DEFAULT_AI_MODEL = "gpt-4o-mini"
+        private const val PUSH_UP_DAILY_GOAL = "pushUpDailyGoal"
     }
 
     private val prefs = context.getSharedPreferences("fitdiary_settings", Context.MODE_PRIVATE)
@@ -60,6 +67,7 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
 
     private val _settings = MutableStateFlow(settingsFor(activeAthleteId.value))
     val settings: StateFlow<Settings> = _settings.asStateFlow()
+    private val pushUpDailyGoals = MutableStateFlow(readPushUpDailyGoals())
     init { scope.launch { activeAthleteId.collect { _settings.value = settingsFor(it) } } }
 
     private fun key(id: Long, name: String): String = "athlete.$id.$name"
@@ -88,12 +96,49 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
             measurementReminderDays = prefs.getInt(k("measurementReminderDays"), d.measurementReminderDays),
             measurementReminderHour = prefs.getInt(k("measurementReminderHour"), d.measurementReminderHour),
             measurementReminderSinceDay = prefs.getLong(k("measurementReminderSinceDay"), d.measurementReminderSinceDay),
+            pushUpDailyGoal = readPushUpDailyGoal(athleteId),
         )
+    }
+
+    private fun readPushUpDailyGoal(athleteId: Long): Int? {
+        val name = key(athleteId, PUSH_UP_DAILY_GOAL)
+        return if (prefs.contains(name)) prefs.getInt(name, 0) else null
+    }
+
+    private fun readPushUpDailyGoals(): Map<Long, Int> = buildMap {
+        prefs.all.forEach { (name, value) ->
+            if (name.startsWith("athlete.") && name.endsWith(".$PUSH_UP_DAILY_GOAL")) {
+                val owner = name.removePrefix("athlete.").removeSuffix(".$PUSH_UP_DAILY_GOAL").toLongOrNull()
+                if (owner != null && owner > 0 && value is Int) put(owner, value)
+            }
+        }
+    }
+
+    /** The subscription stays with its owner even when the selected profile changes. */
+    fun observePushUpDailyGoal(athleteId: Long): Flow<Int?> {
+        require(athleteId > 0)
+        return pushUpDailyGoals.map { it[athleteId] }.distinctUntilChanged()
+    }
+
+    fun setPushUpDailyGoal(goal: Int?, athleteId: Long) {
+        require(athleteId > 0)
+        DailyPushUps.validateTarget(goal)
+        val edit = prefs.edit()
+        val name = key(athleteId, PUSH_UP_DAILY_GOAL)
+        if (goal == null) edit.remove(name) else edit.putInt(name, goal)
+        check(edit.commit()) { "Не удалось сохранить цель отжиманий" }
+        publishSettings()
+    }
+
+    private fun publishSettings() {
+        pushUpDailyGoals.value = readPushUpDailyGoals()
+        _settings.value = settingsFor(activeAthleteId.value)
     }
 
     fun update(transform: (Settings) -> Settings) {
         val owner = activeAthleteId.value
         val next = transform(settingsFor(owner))
+        DailyPushUps.validateTarget(next.pushUpDailyGoal)
         require(next.calorieGoal in 0..100_000 && next.proteinGoalG in 0..10_000 &&
             next.fatGoalG in 0..10_000 && next.carbGoalG in 0..10_000) { "Цели питания вне допустимого диапазона" }
         require(next.measurementReminderDays in 1..365 && next.measurementReminderHour in 0..23 &&
@@ -112,16 +157,22 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
             .putInt(k("measurementReminderDays"), next.measurementReminderDays)
             .putInt(k("measurementReminderHour"), next.measurementReminderHour)
             .putLong(k("measurementReminderSinceDay"), next.measurementReminderSinceDay)
+            .apply {
+                val goal = next.pushUpDailyGoal
+                if (goal == null) remove(k(PUSH_UP_DAILY_GOAL)) else putInt(k(PUSH_UP_DAILY_GOAL), goal)
+            }
             .commit()) { "Не удалось сохранить настройки" }
-        _settings.value = settingsFor(activeAthleteId.value)
+        publishSettings()
     }
 
     private val personalKeys = setOf("calorieGoal", "proteinGoalG", "fatGoalG", "carbGoalG",
         "trackedMeasurements", "measurementReminderEnabled", "measurementReminderDays",
-        "measurementReminderHour", "measurementReminderSinceDay")
+        "measurementReminderHour", "measurementReminderSinceDay", PUSH_UP_DAILY_GOAL)
 
-    private fun safeKey(name: String): Boolean = name == "diaryId" || name in personalKeys ||
-        (Regex("athlete\\.[1-9][0-9]*\\.[A-Za-z]+").matches(name) && name.substringAfterLast('.') in personalKeys)
+    private fun safeKey(name: String): Boolean = name == "diaryId" ||
+        (name in personalKeys && name != PUSH_UP_DAILY_GOAL) ||
+        (Regex("athlete\\.[1-9][0-9]*\\.[A-Za-z]+").matches(name) &&
+            name.substringAfterLast('.') in personalKeys && name.split('.')[1].toLongOrNull() != null)
 
     /** Neither the AI key nor its endpoint travels to another device in a backup. */
     fun exportSafeSettings(): String = buildJsonObject {
@@ -158,6 +209,7 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
                         "measurementReminderDays" -> 1..365
                         "measurementReminderHour" -> 0..23
                         "calorieGoal" -> 0..100_000
+                        PUSH_UP_DAILY_GOAL -> 1..DailyPushUps.MAX_TARGET
                         else -> 0..10_000
                     }
                     require(!value.isString && number != null && number in allowed) { "Неверное значение: $name" }
@@ -182,6 +234,6 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
             }
         }
         check(edit.commit()) { "Не удалось восстановить настройки" }
-        _settings.value = settingsFor(activeAthleteId.value)
+        publishSettings()
     }
 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.MainDispatcherRule
+import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Athlete
 import com.dtyan.fitdiary.data.repo.ActivityClock
@@ -18,7 +19,10 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -35,6 +39,7 @@ class ActivityViewModelTest {
     @get:Rule val mainRule = MainDispatcherRule()
     private lateinit var db: AppDatabase
     private lateinit var repo: ActivityRepository
+    private lateinit var settings: SettingsStore
     private val activeId = MutableStateFlow(1L)
     private val date = LocalDate.of(2026, 10, 20)
     private val epochDay = date.toEpochDay()
@@ -49,12 +54,116 @@ class ActivityViewModelTest {
     }
     @Before fun setup() {
         val executor = mainRule.dispatcher.asExecutor()
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), AppDatabase::class.java)
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        context.getSharedPreferences("fitdiary_settings", Context.MODE_PRIVATE).edit().clear().commit()
+        settings = SettingsStore(context, activeId)
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries().setQueryExecutor(executor).setTransactionExecutor(executor).build()
         repo = ActivityRepository(db, activeId, clock)
     }
     @After fun close() { db.close() }
-    private fun vm(owner: Long = 1L, state: SavedStateHandle = SavedStateHandle()) = ActivityViewModel(repo, owner, state) { epochDay }
+    private fun vm(owner: Long = 1L, state: SavedStateHandle = SavedStateHandle()) = ActivityViewModel(repo, owner, settings, state) { epochDay }
+
+    @Test fun dailyGoalValidatesInput_andKeepsScreenOwnerWhenActiveProfileChanges() = runTest {
+        db.athleteDao().insert(Athlete(id = 2, name = "Друг"))
+        val screen = vm()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { screen.state.collect {} }
+        advanceUntilIdle()
+        var saved = 0
+        for (invalid in listOf("", "1.5", "0", "-1", "100001", "2147483648")) {
+            screen.saveDailyPushUpGoal(invalid) { saved++ }
+            advanceUntilIdle()
+            assertThat(screen.error.value).isNotNull()
+            assertThat(saved).isEqualTo(0)
+            assertThat(settings.settingsFor(1).pushUpDailyGoal).isNull()
+        }
+        screen.saveDailyPushUpGoal(" 10 ") { saved++ }
+        activeId.value = 2L
+        advanceUntilIdle()
+        assertThat(settings.settingsFor(1).pushUpDailyGoal).isEqualTo(10)
+        assertThat(settings.settingsFor(2).pushUpDailyGoal).isNull()
+        assertThat(screen.state.value.dailyPushUpTarget).isEqualTo(10)
+        assertThat(screen.state.value.ownerId).isEqualTo(1)
+        assertThat(saved).isEqualTo(1)
+        screen.clearDailyPushUpGoal { saved++ }
+        advanceUntilIdle()
+        assertThat(settings.settingsFor(1).pushUpDailyGoal).isNull()
+        assertThat(screen.state.value.dailyPushUpTarget).isNull()
+        assertThat(saved).isEqualTo(2)
+    }
+
+    @Test fun dailyProgressRecalculatesAfterEditDelete_andDoesNotApplyCurrentTargetToHistory() = runTest {
+        val screen = vm()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { screen.state.collect {} }
+        advanceUntilIdle()
+        val definitions = repo.getAllDefinitions(1)
+        val normal = definitions.first { it.key == "pushup_standard" }
+        val narrow = definitions.first { it.key == "pushup_narrow" }
+        repo.saveEntry(normal.id, ActivityEntryInput(epochDay, reps = 5, clientToken = "normal-five"), 1)
+        repo.saveEntry(narrow.id, ActivityEntryInput(epochDay, reps = 7, clientToken = "narrow-seven"), 1)
+        repo.saveEntry(normal.id, ActivityEntryInput(epochDay - 1, reps = 30, clientToken = "yesterday"), 1)
+        screen.saveDailyPushUpGoal("10") {}
+        advanceUntilIdle()
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(12)
+        assertThat(screen.state.value.pushUpProgress.reached).isTrue()
+        val entry = repo.getAllEntries(1).first { it.clientToken == "narrow-seven" }
+        screen.editEntry(entry)
+        screen.updateDraft { it.copy(reps = "2") }
+        screen.saveEntry()
+        advanceUntilIdle()
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(7)
+        assertThat(screen.state.value.pushUpProgress.remaining).isEqualTo(3)
+        screen.deleteEntry(repo.getAllEntries(1).first { it.clientToken == "normal-five" }) {}
+        advanceUntilIdle()
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(2)
+        screen.selectDay(epochDay - 1)
+        advanceUntilIdle()
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(30)
+        assertThat(screen.state.value.pushUpProgress.target).isNull()
+        assertThat(screen.state.value.pushUpProgress.reached).isFalse()
+        screen.saveDailyPushUpGoal("20") {}
+        advanceUntilIdle()
+        assertThat(screen.error.value).isNotNull()
+        assertThat(settings.settingsFor(1).pushUpDailyGoal).isEqualTo(10)
+    }
+
+    @Test fun midnightFollowsToday_butPreservesOpenDraftAndExplicitHistorySelection() = runTest {
+        var calendarDay = epochDay
+        val state = SavedStateHandle()
+        val screen = ActivityViewModel(repo, 1, settings, state) { calendarDay }
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { screen.state.collect {} }
+        advanceUntilIdle()
+        val normal = repo.getAllDefinitions(1).first { it.key == "pushup_standard" }
+        repo.saveEntry(normal.id, ActivityEntryInput(epochDay, reps = 10, clientToken = "before-midnight"), 1)
+        screen.newEntry(normal.id)
+        screen.updateDraft { it.copy(reps = "5") }
+        calendarDay++
+        screen.refreshDay()
+        advanceUntilIdle()
+        assertThat(screen.selectedDay.value).isEqualTo(calendarDay)
+        assertThat(screen.state.value.todayEpochDay).isEqualTo(calendarDay)
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(0)
+        assertThat(screen.editor.value!!.epochDay).isEqualTo(epochDay)
+        screen.saveEntry()
+        advanceUntilIdle()
+        assertThat(repo.getAllEntries(1).all { it.epochDay == epochDay }).isTrue()
+        screen.selectDay(epochDay)
+        calendarDay++
+        screen.refreshDay()
+        advanceUntilIdle()
+        assertThat(screen.selectedDay.value).isEqualTo(epochDay)
+        assertThat(screen.state.value.pushUpProgress.cleanReps).isEqualTo(15)
+    }
+
+    @Test fun recreationAfterMidnightMovesPreviousToday_butKeepsHistoricalDate() = runTest {
+        val todayState = SavedStateHandle(mapOf("activityDay" to epochDay, "activityToday" to epochDay))
+        val screen = ActivityViewModel(repo, 1, settings, todayState) { epochDay + 1 }
+        assertThat(screen.selectedDay.value).isEqualTo(epochDay + 1)
+        val historical = SavedStateHandle(mapOf("activityDay" to epochDay - 5, "activityToday" to epochDay))
+        val history = ActivityViewModel(repo, 1, settings, historical) { epochDay + 1 }
+        assertThat(history.selectedDay.value).isEqualTo(epochDay - 5)
+        advanceUntilIdle()
+    }
 
     @Test fun walkingGoalMinutesRoundTripPreservesImportedSeconds() {
         for (seconds in 1..1000) {

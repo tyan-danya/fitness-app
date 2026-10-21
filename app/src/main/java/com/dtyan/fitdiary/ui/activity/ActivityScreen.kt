@@ -26,6 +26,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
@@ -33,19 +36,28 @@ import com.dtyan.fitdiary.data.db.ActivityDefinition
 import com.dtyan.fitdiary.data.db.ActivityEntry
 import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.ActivityProgression
+import com.dtyan.fitdiary.domain.DailyPushUps
 import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.Format
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     val container = LocalContext.current.appContainer
     val owner = remember { container.profiles.activeId.value }
     val vm: ActivityViewModel = viewModel(key = "daily_activity_$owner") {
-        ActivityViewModel(container.activityRepository, owner, createSavedStateHandle())
+        ActivityViewModel(container.activityRepository, owner, container.settings, createSavedStateHandle())
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(vm, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) { vm.refreshDay(); delay(1000L) }
+        }
     }
     val state by vm.state.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
@@ -63,6 +75,8 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var archiveId by rememberSaveable { mutableStateOf<Long?>(null) }
     var chooseSet by rememberSaveable { mutableStateOf(false) }
+    var choosePushUps by rememberSaveable { mutableStateOf(false) }
+    var showDailyGoal by rememberSaveable { mutableStateOf(false) }
     var discardDraft by rememberSaveable { mutableStateOf(false) }
     var showArchived by rememberSaveable { mutableStateOf(false) }
     fun back() {
@@ -78,6 +92,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     val history = state.definitions.firstOrNull { it.id == historyId }
     val timedActivity = state.definitions.firstOrNull { it.id == timerId }
     val editingActivity = state.definitions.firstOrNull { it.id == editor?.activityId }
+    val activePushUps = state.definitions.filter { !it.isArchived && DailyPushUps.isPushUp(it) }
     val title = when {
         editor != null -> if (editor?.entryId == null) "Записать активность" else "Изменить запись"
         timedActivity != null -> "Секундомер"
@@ -145,11 +160,11 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                         TextButton(onClick = { showDate = true }, enabled = !busy, modifier = Modifier.weight(1f)) {
                             Text(Format.dateFull(LocalDate.ofEpochDay(state.epochDay)))
                         }
-                        IconButton(onClick = { vm.selectDay(state.epochDay + 1) }, enabled = !busy && state.epochDay < LocalDate.now().toEpochDay()) {
+                        IconButton(onClick = { vm.selectDay(state.epochDay + 1) }, enabled = !busy && state.epochDay < state.todayEpochDay) {
                             Icon(Icons.AutoMirrored.Filled.ArrowForward, "Следующий день")
                         }
                     }
-                    if (state.epochDay != LocalDate.now().toEpochDay()) TextButton(onClick = { vm.selectDay(LocalDate.now().toEpochDay()) }) { Text("Сегодня") }
+                    if (state.epochDay != state.todayEpochDay) TextButton(onClick = { vm.selectDay(state.todayEpochDay) }) { Text("Сегодня") }
                 }
                 item("summary") {
                     val summary = state.summary
@@ -163,6 +178,11 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                         }
                     }
                 }
+                item("daily_pushups") {
+                    DailyPushUpGoalCard(state.pushUpProgress, isToday = state.epochDay == state.todayEpochDay,
+                        busy = busy, canRecord = activePushUps.isNotEmpty(), onRecord = { choosePushUps = true },
+                        onEditGoal = { vm.clearError(); vm.clearMessage(); showDailyGoal = true })
+                }
                 item("quick") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         state.definitions.firstOrNull { !it.isArchived && it.key == "walking" }?.let { walking ->
@@ -172,7 +192,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
                             OutlinedButton(onClick = { vm.openTimer(plank.id) }, enabled = !busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Планка · секундомер") }
                         }
                         OutlinedButton(onClick = { chooseSet = true }, enabled = !busy && state.definitions.any { !it.isArchived && it.kind == ActivityKind.REPS },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Записать подход") }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Другие упражнения") }
                         onOpenPrograms?.let { TextButton(onClick = it, modifier = Modifier.fillMaxWidth()) { Text("Мои программы и расписание") } }
                     }
                 }
@@ -216,7 +236,7 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
     if (showDate) {
         val picker = rememberDatePickerState(initialSelectedDateMillis = state.epochDay * 86_400_000,
             selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis / 86_400_000 <= LocalDate.now().toEpochDay()
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis / 86_400_000 <= state.todayEpochDay
             })
         DatePickerDialog(onDismissRequest = { showDate = false }, confirmButton = {
             TextButton(onClick = {
@@ -225,6 +245,18 @@ fun ActivityScreen(onBack: () -> Unit, onOpenPrograms: (() -> Unit)? = null) {
             }, enabled = picker.selectedDateMillis != null) { Text("Выбрать") }
         }, dismissButton = { TextButton(onClick = { showDate = false }) { Text("Отмена") } }) { DatePicker(picker) }
     }
+    if (showDailyGoal) DailyPushUpGoalDialog(state.dailyPushUpTarget, ownerName, busy, error,
+        onDismiss = { showDailyGoal = false; vm.clearError() }, onEdit = vm::clearError,
+        onSave = { vm.saveDailyPushUpGoal(it) { showDailyGoal = false } },
+        onClear = { vm.clearDailyPushUpGoal { showDailyGoal = false } })
+    if (choosePushUps) AlertDialog(onDismissRequest = { choosePushUps = false }, title = { Text("Какой вариант отжиманий?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                activePushUps.forEach { activity ->
+                    TextButton(onClick = { choosePushUps = false; vm.newEntry(activity.id) }, modifier = Modifier.fillMaxWidth()) { Text(activity.name) }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { choosePushUps = false }) { Text("Закрыть") } })
     goalId?.let { id -> state.definitions.firstOrNull { it.id == id }?.let { definition ->
         ActivityGoalsDialog(definition, busy, error, onDismiss = { goalId = null }, onSave = { vm.saveGoals(id, it) { goalId = null } })
     } }

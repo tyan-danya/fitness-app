@@ -3,6 +3,7 @@ package com.dtyan.fitdiary.ui.activity
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dtyan.fitdiary.data.SettingsStore
 import com.dtyan.fitdiary.data.db.ActivityDefinition
 import com.dtyan.fitdiary.data.db.ActivityEntry
 import com.dtyan.fitdiary.data.db.ActivityTimer
@@ -11,6 +12,7 @@ import com.dtyan.fitdiary.data.repo.ActivityEntryInput
 import com.dtyan.fitdiary.data.repo.ActivityRepository
 import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.ActivityMetric
+import com.dtyan.fitdiary.domain.DailyPushUps
 import com.dtyan.fitdiary.ui.common.Format
 import java.time.LocalDate
 import java.util.UUID
@@ -29,19 +31,26 @@ data class ActivityUiState(
     val timers: List<ActivityTimer> = emptyList(),
     val epochDay: Long = LocalDate.now().toEpochDay(),
     val loading: Boolean = true,
+    val dailyPushUpTarget: Int? = null,
+    val todayEpochDay: Long = LocalDate.now().toEpochDay(),
+    val ownerId: Long = 1L,
 ) {
     val dayEntries get() = allEntries.filter { it.epochDay == epochDay }.sortedByDescending { it.timestamp }
     val summary get() = activityDaySummary(definitions, dayEntries)
+    val pushUpProgress get() = DailyPushUps.calculate(definitions, allEntries, ownerId, epochDay,
+        dailyPushUpTarget.takeIf { epochDay == todayEpochDay })
 }
 
 /** All reads, drafts, timers and writes belong to the immutable owner of this screen. */
 class ActivityViewModel(
     private val repository: ActivityRepository,
     val ownerId: Long,
+    private val settings: SettingsStore,
     private val savedState: SavedStateHandle = SavedStateHandle(),
     private val today: () -> Long = { LocalDate.now().toEpochDay() },
 ) : ViewModel() {
     val selectedDay = savedState.getStateFlow("activityDay", today())
+    private val currentDay = MutableStateFlow(savedState.get<Long>("activityToday") ?: today())
     val historyId = savedState.getStateFlow<Long?>("activityHistory", null)
     val timerActivityId = savedState.getStateFlow<Long?>("activityTimer", null)
     private val ready = MutableStateFlow(false)
@@ -55,12 +64,47 @@ class ActivityViewModel(
     val editor = _editor.asStateFlow()
     val state = combine(repository.observeDefinitions(ownerId, includeArchived = true), repository.observeEntries(ownerId),
         repository.observeTimers(ownerId), selectedDay, ready) { definitions, entries, timers, day, loaded ->
-        ActivityUiState(definitions, entries, timers, day, !loaded)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ActivityUiState(epochDay = selectedDay.value))
+        ActivityUiState(definitions, entries, timers, day, !loaded, ownerId = ownerId)
+    }.combine(settings.observePushUpDailyGoal(ownerId)) { state, target ->
+        state.copy(dailyPushUpTarget = target)
+    }.combine(currentDay) { state, day -> state.copy(todayEpochDay = day) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000),
+            ActivityUiState(epochDay = selectedDay.value, todayEpochDay = currentDay.value, ownerId = ownerId))
 
-    init { operation {
-        try { repository.ensureDefaults(athleteId = ownerId) } finally { ready.value = true }
-    } }
+    init {
+        refreshDay()
+        operation {
+            try { repository.ensureDefaults(athleteId = ownerId) } finally { ready.value = true }
+        }
+    }
+
+    /** Follow the calendar only when viewing today. Drafts retain their original recording date. */
+    fun refreshDay() {
+        val actual = today()
+        val previous = currentDay.value
+        if (actual != previous) {
+            if (selectedDay.value == previous || selectedDay.value > actual) savedState["activityDay"] = actual
+            currentDay.value = actual
+        }
+        if (savedState.get<Long>("activityToday") != actual) savedState["activityToday"] = actual
+    }
+
+    fun saveDailyPushUpGoal(text: String, onSaved: () -> Unit) = operation {
+        refreshDay()
+        require(selectedDay.value == currentDay.value) { "Дневную цель можно настроить на сегодня" }
+        val target = requireNotNull(text.trim().toIntOrNull()) { "Введите целое число повторов" }
+        settings.setPushUpDailyGoal(target, athleteId = ownerId)
+        _message.value = "Дневная цель по отжиманиям сохранена"
+        onSaved()
+    }
+
+    fun clearDailyPushUpGoal(onSaved: () -> Unit) = operation {
+        refreshDay()
+        require(selectedDay.value == currentDay.value) { "Дневную цель можно настроить на сегодня" }
+        settings.setPushUpDailyGoal(null, athleteId = ownerId)
+        _message.value = "Дневная цель отключена. Записи сохранены"
+        onSaved()
+    }
 
     fun selectDay(day: Long) { if (!_busy.value && day <= today()) savedState["activityDay"] = day }
     fun openHistory(activityId: Long?) { if (!_busy.value) { _error.value = null; _message.value = null; savedState["activityHistory"] = activityId } }
@@ -69,6 +113,7 @@ class ActivityViewModel(
     fun clearError() { _error.value = null }
     fun newEntry(activityId: Long) {
         if (_busy.value) return
+        refreshDay()
         _error.value = null; _message.value = null
         setDraft(ActivityEntryDraft(activityId, selectedDay.value, UUID.randomUUID().toString()))
     }

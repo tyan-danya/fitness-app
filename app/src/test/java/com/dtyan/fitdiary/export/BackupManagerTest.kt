@@ -16,6 +16,7 @@ import com.dtyan.fitdiary.data.repo.PlanBundleRepository
 import com.dtyan.fitdiary.domain.ActivityKind
 import com.dtyan.fitdiary.domain.MeasurementType
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.*
 import org.junit.After
@@ -106,11 +107,15 @@ class BackupManagerTest {
 
     @Test fun roundTripRestoresAllProfilesActiveWorkoutPlanMeasurementsPhotosAndSafeSettings() = runTest {
         seed()
+        settings.setPushUpDailyGoal(45, 1)
+        settings.setPushUpDailyGoal(85, 2)
         manager.writeArchive(archive)
         val contents = entries(archive)
         assertThat(contents.getValue("diary.json").toString(Charsets.UTF_8)).doesNotContain("source-test-key")
         assertThat(contents.getValue("diary.json").toString(Charsets.UTF_8)).doesNotContain("aiBaseUrl")
         settings.update { it.copy(calorieGoal = 1800, aiApiKey = "destination-test-key") }
+        settings.setPushUpDailyGoal(null, 1)
+        settings.setPushUpDailyGoal(10, 2)
         db.mealDao().update(db.mealDao().getByIds(listOf(1), 2).single().copy(name = "Changed"))
         val preview = manager.inspectArchive(archive.inputStream())
         assertThat(preview.profiles).isEqualTo(2)
@@ -123,6 +128,8 @@ class BackupManagerTest {
         assertThat(db.weightDao().getAllOnce(2).single().weightKg).isEqualTo(80.0)
         assertThat(settings.settings.value.calorieGoal).isEqualTo(2500)
         assertThat(settings.settings.value.aiApiKey).isEqualTo("destination-test-key")
+        assertThat(settings.observePushUpDailyGoal(1).first()).isEqualTo(45)
+        assertThat(settings.observePushUpDailyGoal(2).first()).isEqualTo(85)
         val restoredPhoto = File(context.filesDir, db.exerciseDao().getById(1)!!.photoPath!!)
         assertThat(restoredPhoto.readBytes()).isEqualTo(photo.readBytes())
         assertThat(manager.hasRecoveryCopy()).isTrue()
@@ -148,11 +155,13 @@ class BackupManagerTest {
         val preview = manager.inspectArchive(archive.inputStream())
         db.mealDao().update(db.mealDao().getByIds(listOf(1), 2).single().copy(name = "Current diary"))
         settings.update { it.copy(calorieGoal = 2700) }
+        settings.setPushUpDailyGoal(55, 1)
         db.openHelper.writableDatabase.execSQL("CREATE TEMP TRIGGER reject_restore BEFORE INSERT ON meals BEGIN SELECT RAISE(ABORT, 'test restore failure'); END")
         assertThat(runCatching { manager.restoreBackup(preview) }.isFailure).isTrue()
         assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Current diary")
         assertThat(db.workoutSetDao().getForWorkoutOnce(1)).hasSize(1)
         assertThat(settings.settings.value.calorieGoal).isEqualTo(2700)
+        assertThat(settings.observePushUpDailyGoal(1).first()).isEqualTo(55)
         assertThat(photo.exists()).isTrue()
         assertThat(manager.hasRecoveryCopy()).isTrue()
         manager.discard(preview)
@@ -193,6 +202,8 @@ class BackupManagerTest {
 
     @Test fun version15BackupUpgradesWithoutLosingOldDiary() = runTest {
         seed(); manager.writeArchive(archive)
+        settings.setPushUpDailyGoal(35, 1)
+        settings.setPushUpDailyGoal(65, 2)
         val content = entries(archive).toMutableMap()
         val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
         val tables = document["tables"]!!.jsonObject.toMutableMap().apply {
@@ -210,6 +221,8 @@ class BackupManagerTest {
         val preview = manager.inspectArchive(ByteArrayInputStream(zip(content)))
         assertThat(preview.templates).isEqualTo(0)
         manager.restoreBackup(preview)
+        assertThat(settings.observePushUpDailyGoal(1).first()).isNull()
+        assertThat(settings.observePushUpDailyGoal(2).first()).isNull()
         assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
         assertThat(db.workoutDao().plannedExerciseIds(1)).containsExactly(1L)
         db.openHelper.readableDatabase.query("SELECT targetSets,completedAt FROM workout_exercises WHERE workoutId=1").use {
@@ -220,6 +233,28 @@ class BackupManagerTest {
         db.openHelper.readableDatabase.query("SELECT COUNT(*) FROM workout_templates").use {
             it.moveToFirst(); assertThat(it.getInt(0)).isEqualTo(0)
         }
+    }
+
+    @Test fun invalidDailyGoalInBackupIsRejectedWithoutChangingCurrentDiaryOrSettings() = runTest {
+        seed()
+        settings.setPushUpDailyGoal(75, 1)
+        settings.setPushUpDailyGoal(125, 2)
+        manager.writeArchive(archive)
+        val content = entries(archive).toMutableMap()
+        val document = Json.parseToJsonElement(content.getValue("diary.json").toString(Charsets.UTF_8)).jsonObject
+        val safeSettings = document.getValue("settings").jsonObject.toMutableMap()
+        safeSettings["athlete.2.pushUpDailyGoal"] = JsonPrimitive(0)
+        content["diary.json"] = JsonObject(document.toMutableMap().apply {
+            put("settings", JsonObject(safeSettings))
+        }).toString().toByteArray(Charsets.UTF_8)
+        val before = settings.exportSafeSettings()
+        assertThat(runCatching { manager.inspectArchive(ByteArrayInputStream(zip(content))) }.isFailure).isTrue()
+        assertThat(settings.exportSafeSettings()).isEqualTo(before)
+        assertThat(settings.observePushUpDailyGoal(1).first()).isEqualTo(75)
+        assertThat(settings.observePushUpDailyGoal(2).first()).isEqualTo(125)
+        assertThat(db.mealDao().getAllOnce(2).single().name).isEqualTo("Saved meal")
+        assertThat(db.workoutSetDao().getForWorkoutOnce(1)).hasSize(1)
+        assertThat(photo.exists()).isTrue()
     }
 
     @Test fun activityBackupPreservesGoalsScheduleHistoryAndExcludesUnrecordedStopwatch() = runTest {

@@ -73,8 +73,9 @@ class ActivityUiSmokeTest {
 
     @Test fun walking_validatesAndRecordsSegmentMetricsAt320dpWithoutWorkout() {
         render()
-        waitForText("Записать ходьбу")
+        waitForText("Отжимания за день")
         capture("activity-home-320dp-font130")
+        compose.onNodeWithTag("activity-day-list").performScrollToNode(hasText("Записать ходьбу"))
         compose.onNodeWithText("Записать ходьбу").performScrollTo().performClick()
         waitForText("Расстояние, км")
         compose.onNodeWithText("Сохранить · Даня").performClick()
@@ -127,7 +128,8 @@ class ActivityUiSmokeTest {
                 instructions = "Подробное описание техники. ".repeat(50), sortOrder = plank.sortOrder), 1)
         }
         render()
-        waitForText("Планка · секундомер")
+        waitForText("Отжимания за день")
+        compose.onNodeWithTag("activity-day-list").performScrollToNode(hasText("Планка · секундомер"))
         compose.onNodeWithText("Планка · секундомер").performScrollTo().performClick()
         waitForText("Старт")
         compose.onNodeWithText("Цель: 15 секунд").assertIsDisplayed()
