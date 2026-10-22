@@ -65,6 +65,10 @@ class DailyPushUpGoalUiTest {
     private fun showCard() {
         compose.onNodeWithTag("activity-day-list").performScrollToNode(hasText("Отжимания за день"))
     }
+    /** Карточка выше экрана 320 dp при шрифте 130 %: докручиваем до конкретной строки. */
+    private fun showLine(text: String) {
+        compose.onNodeWithTag("activity-day-list").performScrollToNode(hasText(text))
+    }
     private fun capture(name: String) {
         compose.runOnIdle {
             val view = WindowInspector.getGlobalWindowViews().last { it.width > 0 && it.height > 0 && it.isShown }
@@ -146,7 +150,7 @@ class DailyPushUpGoalUiTest {
         compose.onNodeWithText("Сохранить · Даня").performClick()
         waitForText("20 / 20 повторов")
         showCard()
-        compose.onNodeWithText("Цель достигнута").assertIsDisplayed()
+        showLine("Цель достигнута"); compose.onNodeWithText("Цель достигнута").assertIsDisplayed()
         runBlocking(Dispatchers.IO) { assertThat(container.settings.observePushUpDailyGoal(1).first()).isEqualTo(20) }
         compose.onNodeWithTag("activity-day-list").performScrollToIndex(0)
         compose.onNodeWithContentDescription("Предыдущий день").performClick()
@@ -181,10 +185,10 @@ class DailyPushUpGoalUiTest {
         render()
         waitForText("90 / 100 повторов")
         showCard()
-        compose.onNodeWithText("Дни по 100+ повторов").assertIsDisplayed()
-        compose.onNodeWithText("Текущая серия: 7 дн.").assertIsDisplayed()
-        compose.onNodeWithText("Лучшая серия: 7 дн.").assertIsDisplayed()
-        compose.onNodeWithText("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.").assertIsDisplayed()
+        showLine("Дни по 100+ повторов"); compose.onNodeWithText("Дни по 100+ повторов").assertIsDisplayed()
+        showLine("Текущая серия: 7 дн."); compose.onNodeWithText("Текущая серия: 7 дн.").assertIsDisplayed()
+        showLine("Лучшая серия: 7 дн."); compose.onNodeWithText("Лучшая серия: 7 дн.").assertIsDisplayed()
+        showLine("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано."); compose.onNodeWithText("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.").assertIsDisplayed()
         capture("daily-pushup-streak-320dp-font130")
         compose.onNodeWithTag("daily-pushup-record").performScrollTo().performClick()
         waitForText("Какой вариант отжиманий?")
@@ -194,9 +198,9 @@ class DailyPushUpGoalUiTest {
         compose.onNodeWithText("Сохранить · Даня").performClick()
         waitForText("100 / 100 повторов")
         showCard()
-        compose.onNodeWithText("Цель достигнута").assertIsDisplayed()
-        compose.onNodeWithText("Текущая серия: 8 дн.").assertIsDisplayed()
-        compose.onNodeWithText("Лучшая серия: 8 дн.").assertIsDisplayed()
+        showLine("Цель достигнута"); compose.onNodeWithText("Цель достигнута").assertIsDisplayed()
+        showLine("Текущая серия: 8 дн."); compose.onNodeWithText("Текущая серия: 8 дн.").assertIsDisplayed()
+        showLine("Лучшая серия: 8 дн."); compose.onNodeWithText("Лучшая серия: 8 дн.").assertIsDisplayed()
         compose.onNodeWithText("Вчерашняя серия сохраняется до конца дня. Сегодня пока не засчитано.").assertDoesNotExist()
         compose.onNodeWithText("Изменить цель").performScrollTo().performClick()
         waitForText("Цель отжиманий на день")

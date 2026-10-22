@@ -97,7 +97,7 @@ class ActivityUiSmokeTest {
             assertThat(row.durationSeconds).isEqualTo(2100)
             assertThat(container.database.workoutDao().getActiveOnce(1)).isNull()
         }
-        compose.onNodeWithText("Ходьба: 2,75 км · 4200 шагов").assertExists()
+        compose.onNode(hasText("2,75 км · 4200 шагов · 35 мин") and hasAnyAncestor(hasTestTag("activity-day-summary"))).assertExists()
     }
 
     @Test fun importedScheduleExpandsAllWeekdays_andKeepsProgramStartReachable() {

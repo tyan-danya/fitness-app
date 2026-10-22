@@ -56,6 +56,8 @@ interface ActivityDao {
     suspend fun deleteTimer(activityId: Long, athleteId: Long)
     @Query("SELECT * FROM activity_plans WHERE planKey = :key AND athleteId = :athleteId")
     suspend fun getPlanByKey(key: String, athleteId: Long): ActivityPlan?
+    @Query("SELECT * FROM activity_plans WHERE id = :id AND athleteId = :athleteId")
+    suspend fun getPlan(id: Long, athleteId: Long): ActivityPlan?
     @Query("SELECT * FROM activity_plans WHERE athleteId = :athleteId ORDER BY id DESC")
     fun observePlans(athleteId: Long): Flow<List<ActivityPlan>>
     @Insert

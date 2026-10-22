@@ -169,6 +169,16 @@ class TemplatesViewModel(
         plans?.deleteSchedule(id, ownerId)
         _message.value = "Расписание удалено. Программы, цели и результаты сохранены."
     }
+    /** Days 1..7 (Monday..Sunday) exchange their whole contents. */
+    fun swapDays(planId: Long, first: Int, second: Int) = operation {
+        requireNotNull(plans) { "Обновите приложение для изменения плана" }.swapDays(planId, ownerId, first, second)
+        _message.value = PLAN_UPDATED
+    }
+    /** +1 moves every day's contents to the next weekday, −1 to the previous one. */
+    fun shiftWeek(planId: Long, days: Int) = operation {
+        requireNotNull(plans) { "Обновите приложение для изменения плана" }.shiftWeek(planId, ownerId, days)
+        _message.value = PLAN_UPDATED
+    }
     fun importPreview() {
         val captured = _preview.value ?: return
         operation {
@@ -224,6 +234,7 @@ class TemplatesViewModel(
     }
 
     companion object {
+        const val PLAN_UPDATED = "План недели обновлён"
         private fun decodeDraft(value: String?): TemplateDraft? = value?.let { text -> runCatching {
             val json = JSONObject(text)
             val rows = json.getJSONArray("rows")

@@ -87,6 +87,7 @@ import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.domain.ExerciseGuides
+import com.dtyan.fitdiary.domain.WeightSteps
 import com.dtyan.fitdiary.ui.common.ConfettiBurst
 import com.dtyan.fitdiary.ui.common.DetailTopBar
 import com.dtyan.fitdiary.ui.common.EmptyState
@@ -185,6 +186,7 @@ private fun AthleteExerciseLogScreen(
             container.workoutRepository,
             container.exerciseRepository,
             createSavedStateHandle(),
+            container.settings,
         )
     }
 
@@ -318,6 +320,8 @@ private fun AthleteExerciseLogScreen(
                         athleteName = athleteName,
                         busy = ui.saving,
                         weightStep = ui.weightStepKg,
+                        stepGuess = ui.stepGuess,
+                        stepFromHistory = ui.stepFromHistory,
                         onStepChange = vm::setWeightStep,
                         previous = ui.previousSets.lastOrNull(),
                         onRepeatPrevious = vm::repeatPrevious,
@@ -479,6 +483,8 @@ private fun SetInputCard(
     athleteName: String,
     busy: Boolean,
     weightStep: Double,
+    stepGuess: WeightSteps.StepGuess?,
+    stepFromHistory: Boolean,
     onStepChange: (Double) -> Unit,
     previous: WorkoutSet?,
     onRepeatPrevious: () -> Unit,
@@ -488,6 +494,8 @@ private fun SetInputCard(
     val weightValid = weight != null && weight.isFinite() && weight in 0.0..2000.0
     val repsValid = reps != null && reps in 1..999
     var stepMenu by remember { mutableStateOf(false) }
+    var customStep by rememberSaveable { mutableStateOf(false) }
+    val stepFromRecords = stepGuess != null && ExerciseLogViewModel.sameStep(stepGuess.step, weightStep)
     val largeText = LocalDensity.current.fontScale > 1.2f
     val repsFocus = remember { FocusRequester() }
     FitCard(spacing = 12.dp) {
@@ -517,17 +525,30 @@ private fun SetInputCard(
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
-                FitButton("Шаг: ${Format.weight(weightStep)} кг", { stepMenu = true }, kind = FitButtonKind.Tonal,
+                FitButton("Шаг: ${Format.weight(weightStep)} кг" + if (stepFromRecords) " · по записям" else "",
+                    { stepMenu = true }, kind = FitButtonKind.Tonal,
                     compact = true, icon = Icons.Rounded.Straighten, enabled = !busy)
                 DropdownMenu(expanded = stepMenu, onDismissRequest = { stepMenu = false }) {
-                    listOf(0.5, 1.0, 1.25, 2.5, 5.0, 10.0).forEach { step ->
+                    STEP_OPTIONS.forEach { step ->
                         DropdownMenuItem(text = { Text("${Format.weight(step)} кг") },
                             onClick = { stepMenu = false; onStepChange(step) })
                     }
+                    HorizontalDivider()
+                    if (stepGuess != null && !stepFromRecords) {
+                        DropdownMenuItem(text = { Text("По записям: ${Format.weight(stepGuess.step)} кг") },
+                            onClick = { stepMenu = false; onStepChange(stepGuess.step) })
+                    }
+                    DropdownMenuItem(text = { Text("Свой шаг…") },
+                        onClick = { stepMenu = false; customStep = true })
                 }
             }
             if (previous != null) FitButton("Как в прошлый раз: ${Format.weight(previous.weightKg)} × ${previous.reps}",
                 onRepeatPrevious, kind = FitButtonKind.Tonal, compact = true, icon = Icons.Rounded.Replay, enabled = !busy)
+        }
+        if (stepFromHistory && stepFromRecords) {
+            val scale = if (stepGuess.base > 0) " (шкала от ${Format.weight(stepGuess.base)} кг)" else ""
+            Text("Шаг ${Format.weight(stepGuess.step)} кг определён по вашим записям$scale. Его можно сменить.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if ((!weightValid && weightText.isNotBlank()) || (!repsValid && repsText.isNotBlank())) {
             Text("Вес: от 0 до 2000 кг. Повторы: от 1 до 999.", color = MaterialTheme.colorScheme.error,
@@ -540,6 +561,49 @@ private fun SetInputCard(
                 enabled = weightValid && repsValid && !busy)
         }
     }
+    if (customStep) {
+        CustomStepDialog(
+            current = weightStep,
+            onDismiss = { customStep = false },
+            onSave = { step -> customStep = false; onStepChange(step) },
+        )
+    }
+}
+
+/** Готовые шаги меню; шаг по записям и свой шаг добавляются отдельно. */
+private val STEP_OPTIONS = listOf(1.0, 2.0, 2.5, 4.0, 5.0, 10.0)
+
+/** Свой шаг тренажёра: от 0,1 до 50 кг, через запятую или точку. */
+@Composable
+private fun CustomStepDialog(
+    current: Double,
+    onDismiss: () -> Unit,
+    onSave: (Double) -> Unit,
+) {
+    var text by rememberSaveable { mutableStateOf(Format.weight(current)) }
+    val value = text.trim().replace(',', '.').toDoubleOrNull()
+        ?.takeIf { it.isFinite() && it in ExerciseLogViewModel.STEP_RANGE }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Свой шаг") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Шаг, кг") },
+                supportingText = { Text("От 0,1 до 50 кг") },
+                isError = text.isNotBlank() && value == null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { value?.let(onSave) }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { value?.let(onSave) }, enabled = value != null) { Text("Сохранить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
 }
 
 @Composable

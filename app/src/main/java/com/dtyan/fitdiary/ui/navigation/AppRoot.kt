@@ -127,13 +127,18 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
     val showBottomBar = currentRoute in TABS.map { it.route }
     val compactLabels = LocalConfiguration.current.screenWidthDp < 360 || LocalDensity.current.fontScale > 1.15f
 
-    LaunchedEffect(requestedTab, requestNonce) {
-        val route = requestedTab?.takeIf { r -> TABS.any { it.route == r } } ?: return@LaunchedEffect
+    /** Переход на вкладку так же, как нажатие на неё внизу: со своим стеком и без дублей. */
+    fun openTab(route: String) {
         navController.navigate(route) {
             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
             launchSingleTop = true
             restoreState = true
         }
+    }
+
+    LaunchedEffect(requestedTab, requestNonce) {
+        val route = requestedTab?.takeIf { r -> TABS.any { it.route == r } } ?: return@LaunchedEffect
+        openTab(route)
     }
 
     Scaffold(
@@ -151,15 +156,7 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
                         }
                         NavigationBarItem(
                             selected = currentRoute == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
+                            onClick = { openTab(tab.route) },
                             modifier = Modifier.testTag("tab-${tab.route}"),
                             icon = { Icon(tab.icon, contentDescription = null) },
                             label = { Text(if (compactLabels) tab.shortTitle else tab.title, maxLines = 1) },
@@ -187,6 +184,8 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
                     onOpenWorkoutDetails = { id -> navController.navigate(Routes.workoutDetails(id)) },
                     onOpenTemplates = { navController.navigate(Routes.templates()) },
                     onOpenActivity = { navController.navigate(Routes.ACTIVITY) },
+                    onOpenStats = { openTab(Routes.STATS) },
+                    onOpenBody = { openTab(Routes.MEASUREMENTS) },
                 )
             }
             composable(Routes.ACTIVITY) {

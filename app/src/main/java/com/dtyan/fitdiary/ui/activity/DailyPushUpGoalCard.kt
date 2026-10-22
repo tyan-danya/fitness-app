@@ -9,7 +9,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.LocalFireDepartment
@@ -44,6 +47,13 @@ internal fun DailyPushUpGoalCard(
     onRecord: () -> Unit,
     onEditGoal: () -> Unit,
     streak: DailyPushUpStreak? = null,
+    variants: List<PushUpVariantLine> = emptyList(),
+    weekTotals: Map<Long, Long> = emptyMap(),
+    weekTarget: Int? = null,
+    selectedDay: Long = 0L,
+    todayEpochDay: Long = 0L,
+    onOpenVariant: (Long) -> Unit = {},
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val target = progress.target.takeIf { isToday }
     val uncounted = (progress.totalReps - progress.cleanReps).coerceAtLeast(0)
@@ -58,10 +68,31 @@ internal fun DailyPushUpGoalCard(
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             Text("Подходов: ${progress.setCount}", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Какие варианты делались в этот день: каждый открывает свою историю.
+            if (variants.isNotEmpty()) Column(Modifier.testTag("pushup-variants")) {
+                variants.forEach { variant ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(MaterialTheme.shapes.small)
+                            .clickable(onClickLabel = "История варианта") { onOpenVariant(variant.activityId) }
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        // Название и подходы в два ряда: длинный ряд «10 + 10 + …» не сжимает название в столбик.
+                        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                            Text(variant.shortName.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium)
+                            Text("${variant.sets.sum()} повт.: ${variant.sets.joinToString(" + ")}", style = MaterialTheme.typography.titleSmall,
+                                color = colors.accent)
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             if (uncounted > 0) Text("Ещё $uncounted повторов с поправкой на технику — в истории, без зачёта в цель.",
                 style = MaterialTheme.typography.bodySmall)
             if (!isToday) {
                 Text("Цель настраивается для сегодняшнего дня", style = MaterialTheme.typography.bodySmall)
+                WeekStreakStrip(weekTotals, weekTarget, todayEpochDay, selectedDay)
             } else {
                 if (target != null) {
                     LinearProgressIndicator(progress = { progress.fraction },
@@ -72,7 +103,9 @@ internal fun DailyPushUpGoalCard(
                         style = MaterialTheme.typography.bodyMedium)
                     streak?.takeIf { it.target == target }?.let { series ->
                         Column(Modifier.testTag("daily-pushup-streak"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Дни по ${series.target}+ повторов", style = MaterialTheme.typography.titleSmall)
+                            Text("Дни по ${series.target}+ повторов", style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(top = 6.dp))
+                            WeekStreakStrip(weekTotals, series.target, todayEpochDay, selectedDay)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 StatusPill("Текущая серия: ${series.currentDays} дн.", icon = Icons.Rounded.LocalFireDepartment,
                                     container = colors.container, contentColor = colors.onContainer)
@@ -83,7 +116,10 @@ internal fun DailyPushUpGoalCard(
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                } else Text("Цель не задана", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text("Цель не задана", style = MaterialTheme.typography.bodySmall)
+                    WeekStreakStrip(weekTotals, null, todayEpochDay, selectedDay)
+                }
                 Text("Не нужно добирать через боль или усталость.", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -98,6 +134,8 @@ internal fun DailyPushUpGoalCard(
                         kind = FitButtonKind.Plain, compact = true, icon = Icons.Rounded.Flag, enabled = !busy)
                 },
             )
+            if (onOpenHistory != null) FitButton("История отжиманий", onOpenHistory, Modifier.fillMaxWidth(),
+                kind = FitButtonKind.Plain, compact = true, icon = Icons.Rounded.History, enabled = !busy)
     }
 }
 

@@ -1,6 +1,8 @@
 package com.dtyan.fitdiary.ui.activity
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.EmojiEvents
+import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
@@ -30,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -42,10 +47,13 @@ import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.FitButton
 import com.dtyan.fitdiary.ui.common.FitButtonKind
 import com.dtyan.fitdiary.ui.common.Format
+import com.dtyan.fitdiary.ui.common.StatusPill
 import com.dtyan.fitdiary.ui.common.sectionColors
+import com.dtyan.fitdiary.ui.theme.fitAccents
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ActivityStopwatchPanel(definition: ActivityDefinition, timer: ActivityTimer?, progress: ActivityProgress, ownerName: String,
     busy: Boolean, error: String?, vm: ActivityViewModel, modifier: Modifier = Modifier) {
@@ -82,36 +90,57 @@ internal fun ActivityStopwatchPanel(definition: ActivityDefinition, timer: Activ
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item("title") {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(definition.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f))
                 ExerciseGuideThumb(ExerciseGuides.forActivity(definition), size = 48.dp, displayName = definition.name)
+                Column(Modifier.weight(1f)) {
+                    Text(definition.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("Результат для: $ownerName", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Text("Результат для: $ownerName", style = MaterialTheme.typography.titleMedium)
-            Text("Дата начала: ${Format.dateFull(LocalDate.ofEpochDay(day))}", style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         item("clock") {
-            Text(shownSeconds?.let { Format.durationClock(it * 1000) } ?: "0:00", style = MaterialTheme.typography.displayLarge,
-                color = sectionColors().accent)
-            if (target != null) {
-                Text("Цель: ${activityValue(target, definition.goalMetric)}", style = MaterialTheme.typography.titleLarge)
-                if (shownSeconds != null && shownSeconds >= target) {
-                    Text("Цель в этом отсчёте достигнута", color = MaterialTheme.colorScheme.primary)
-                } else {
-                    Text("Осталось: ${activityValue((target - (shownSeconds ?: 0L)).coerceAtLeast(0.0), definition.goalMetric)}",
-                        style = MaterialTheme.typography.titleMedium)
-                }
-                definition.goals.firstOrNull { it > target }?.let { next ->
-                    Text("Следующая ступень: ${activityValue(next, definition.goalMetric)}", style = MaterialTheme.typography.bodySmall)
-                }
-            } else Text("Цель не задана. Можно настроить её в карточке активности.", style = MaterialTheme.typography.bodySmall)
-            Text(when {
-                timer == null -> "Нажмите «Старт», когда готовы."
-                needsCorrection -> "После перезапуска или переноса приложения укажите фактическое время вручную."
-                timer.durationSeconds == null -> "Секундомер идёт. Можно свернуть приложение — время сохранится."
-                else -> "Остановлен. Проверьте время и сохраните подход."
-            })
-            Text("Прогресс изменится только после сохранения подхода.", style = MaterialTheme.typography.bodySmall)
+            val running = timer != null && timer.durationSeconds == null && !needsCorrection
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                StopwatchDial(
+                    elapsedSeconds = shownSeconds,
+                    goalSeconds = target,
+                    running = running,
+                    nextGoalSeconds = target?.let { goal -> definition.goals.firstOrNull { it > goal } },
+                    status = when {
+                        timer == null -> "готов к старту"
+                        needsCorrection -> "укажите время вручную"
+                        target != null && (shownSeconds ?: 0L) >= target -> "цель достигнута"
+                        running -> "держим"
+                        else -> "остановлен"
+                    },
+                )
+                if (target != null) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val colors = sectionColors()
+                        StatusPill("Цель: ${activityValue(target, definition.goalMetric)}", icon = Icons.Rounded.Flag,
+                            container = colors.container, contentColor = colors.onContainer)
+                        if (shownSeconds != null && shownSeconds >= target) {
+                            StatusPill("Цель в этом отсчёте достигнута", icon = Icons.Rounded.EmojiEvents,
+                                container = fitAccents.gold.copy(alpha = 0.18f), contentColor = MaterialTheme.colorScheme.onSurface)
+                        } else {
+                            StatusPill("Осталось: ${activityValue((target - (shownSeconds ?: 0L)).coerceAtLeast(0.0), definition.goalMetric)}")
+                        }
+                        definition.goals.firstOrNull { it > target }?.let { next ->
+                            StatusPill("Следующая ступень: ${activityValue(next, definition.goalMetric)}")
+                        }
+                    }
+                } else Text("Цель не задана. Можно настроить её в карточке активности.", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(when {
+                    timer == null -> "Нажмите «Старт», когда готовы."
+                    needsCorrection -> "После перезапуска или переноса приложения укажите фактическое время вручную."
+                    timer.durationSeconds == null -> "Секундомер идёт. Можно свернуть приложение — время сохранится."
+                    else -> "Остановлен. Проверьте время и сохраните подход."
+                }, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+                Text("Прогресс изменится только после сохранения подхода · ${Format.dateFull(LocalDate.ofEpochDay(day))}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            }
         }
         if (timer == null) item("start") {
             FitButton("Старт", { vm.startTimer(definition.id) }, Modifier.fillMaxWidth(), icon = Icons.Rounded.PlayArrow, enabled = !busy)

@@ -148,6 +148,9 @@ private fun TemplateScreenContent(
     var discard by rememberSaveable { mutableStateOf(false) }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
     var deleteScheduleId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The schedule whose days were last moved: its card, not the top of the list, shows «План недели обновлён».
+    var editedScheduleId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val planUpdated = message == TemplatesViewModel.PLAN_UPDATED
     var startId by rememberSaveable { mutableStateOf<Long?>(null) }
     var participants by rememberSaveable { mutableStateOf<List<Long>>(listOf(ownerId)) }
     var sourceVisible by rememberSaveable(sourceWorkoutId) { mutableStateOf(sourceWorkoutId != null && !vm.sourceHandled) }
@@ -222,13 +225,19 @@ private fun TemplateScreenContent(
                         )
                         Text("Импорт принимает одну программу или целый план недели с активностью. Сначала покажем содержимое файла.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        StatusText(busy, error, message)
+                        StatusText(busy, error, message.takeUnless { planUpdated })
                     }
                 }
                 items(schedules, key = { "schedule_${it.id}" }) { schedule ->
                     val parsed = remember(schedule.documentJson) { runCatching { PlanBundleExchange.parse(schedule.documentJson) }.getOrNull() }
                     FitCard {
-                        if (parsed != null) PlanContents(parsed) else Text(schedule.name, style = MaterialTheme.typography.titleMedium)
+                        if (parsed != null) PlanContents(parsed, enabled = !busy,
+                            onSwapDays = { first, second -> editedScheduleId = schedule.id; vm.swapDays(schedule.id, first, second) },
+                            onShiftWeek = { days -> editedScheduleId = schedule.id; vm.shiftWeek(schedule.id, days) })
+                        else Text(schedule.name, style = MaterialTheme.typography.titleMedium)
+                        // Confirm next to the moved days: with the week expanded the top of the list is off screen.
+                        if (planUpdated && schedule.id == editedScheduleId) Text(TemplatesViewModel.PLAN_UPDATED,
+                            color = sectionColors().accent, style = MaterialTheme.typography.bodyMedium)
                         FitButton("Удалить расписание", { deleteScheduleId = schedule.id }, kind = FitButtonKind.Plain, compact = true,
                             icon = Icons.Rounded.Delete, enabled = !busy)
                     }

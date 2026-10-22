@@ -2,6 +2,7 @@ package com.dtyan.fitdiary.data
 
 import android.content.Context
 import com.dtyan.fitdiary.domain.DailyPushUps
+import com.dtyan.fitdiary.domain.ManualStepRegistry
 import com.dtyan.fitdiary.domain.MeasurementType
 import java.time.LocalDate
 import java.util.UUID
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /** Настройки приложения поверх SharedPreferences, наружу — StateFlow. */
-class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Long> = MutableStateFlow(1L)) {
+class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Long> = MutableStateFlow(1L)) : ManualStepRegistry {
 
     data class Settings(
         val calorieGoal: Int = 2200,
@@ -48,6 +49,8 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
         const val DEFAULT_AI_BASE_URL = "https://api.openai.com/v1"
         const val DEFAULT_AI_MODEL = "gpt-4o-mini"
         private const val PUSH_UP_DAILY_GOAL = "pushUpDailyGoal"
+        /** Список id через запятую. Только на этом устройстве: в резервную копию не входит. */
+        private const val MANUAL_WEIGHT_STEPS = "manualWeightSteps"
     }
 
     private val prefs = context.getSharedPreferences("fitdiary_settings", Context.MODE_PRIVATE)
@@ -163,6 +166,17 @@ class SettingsStore(context: Context, private val activeAthleteId: StateFlow<Lon
             }
             .commit()) { "Не удалось сохранить настройки" }
         publishSettings()
+    }
+
+    private fun manualWeightSteps(): Set<Long> =
+        prefs.getString(MANUAL_WEIGHT_STEPS, null).orEmpty().split(',').mapNotNull { it.trim().toLongOrNull() }.toSet()
+
+    override fun isWeightStepManual(exerciseId: Long): Boolean = exerciseId in manualWeightSteps()
+
+    override fun markWeightStepManual(exerciseId: Long) {
+        require(exerciseId > 0)
+        val next = manualWeightSteps() + exerciseId
+        check(prefs.edit().putString(MANUAL_WEIGHT_STEPS, next.sorted().joinToString(",")).commit()) { "Не удалось сохранить шаг веса" }
     }
 
     /** Подключение ИИ общее для всех профилей; пустые URL и модель возвращают значения по умолчанию. */

@@ -56,6 +56,10 @@ class ExerciseRepository(
 
     suspend fun setWeightStep(exerciseId: Long, stepKg: Double) = updateWeightStep(exerciseId, stepKg)
 
+    /** Вес → число подходов по упражнению во всех тренировках: из этого подбирается шаг шкалы. */
+    suspend fun weightUsage(exerciseId: Long): Map<Double, Int> =
+        setDao.weightUsage(exerciseId).associate { it.weightKg to it.sets }
+
     /**
      * id избранных упражнений профиля (в порядке добавления). Профиль фиксируется
      * в момент вызова: при смене активного профиля нужно подписаться заново.

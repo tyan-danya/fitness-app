@@ -73,6 +73,19 @@ object DailyPushUps {
         )
     }
 
+    /** Clean push-up reps per day (epochDay → reps) for one profile; the week calendar and streaks share it. */
+    fun dailyCleanTotals(definitions: List<ActivityDefinition>, entries: List<ActivityEntry>, athleteId: Long): Map<Long, Long> {
+        require(athleteId > 0)
+        val activityIds = activityIds(definitions, athleteId)
+        val totals = mutableMapOf<Long, Long>()
+        entries.forEach { entry ->
+            if (entry.athleteId != athleteId || entry.activityId !in activityIds || !entry.isClean) return@forEach
+            val reps = entry.reps?.takeIf { it > 0 } ?: return@forEach
+            totals[entry.epochDay] = totals.getOrDefault(entry.epochDay, 0L) + reps.toLong()
+        }
+        return totals
+    }
+
     /** Re-evaluates every past day against the selected target; unfinished today keeps yesterday's streak. */
     fun streak(
         definitions: List<ActivityDefinition>,
@@ -83,14 +96,7 @@ object DailyPushUps {
     ): DailyPushUpStreak {
         require(athleteId > 0)
         validateTarget(target)
-        val activityIds = activityIds(definitions, athleteId)
-        val cleanTotals = mutableMapOf<Long, Long>()
-        entries.forEach { entry ->
-            if (entry.athleteId != athleteId || entry.activityId !in activityIds ||
-                !entry.isClean || entry.epochDay > todayEpochDay) return@forEach
-            val reps = entry.reps?.takeIf { it > 0 } ?: return@forEach
-            cleanTotals[entry.epochDay] = cleanTotals.getOrDefault(entry.epochDay, 0L) + reps.toLong()
-        }
+        val cleanTotals = dailyCleanTotals(definitions, entries, athleteId).filterKeys { it <= todayEpochDay }
         val reachedDays = cleanTotals.filterValues { it >= target.toLong() }.keys.sorted()
         var previousDay: Long? = null
         var run = 0

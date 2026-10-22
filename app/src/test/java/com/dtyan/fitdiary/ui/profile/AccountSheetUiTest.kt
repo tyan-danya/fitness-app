@@ -83,8 +83,12 @@ class AccountSheetUiTest {
         compose.onNodeWithText("Добавить участника").performScrollTo().performClick()
         waitForText("Новый участник")
         compose.onNode(hasSetTextAction() and hasText("Имя")).performTextReplacement("Саша")
-        compose.onNodeWithText("Добавить", substring = false).performClick()
-        waitForText("Саша")
+        compose.onNodeWithText("Добавить", substring = false).assertIsEnabled().performClick()
+        // Запись идёт через IO-поток Room: сначала дожидаемся её, затем обновления списка на экране.
+        compose.waitUntil(20_000) {
+            runBlocking(Dispatchers.IO) { container.profiles.profiles.first().any { it.name == "Саша" } }
+        }
+        compose.waitUntil(20_000) { compose.onAllNodesWithText("Саша").fetchSemanticsNodes().isNotEmpty() }
         runBlocking(Dispatchers.IO) {
             assertThat(container.profiles.profiles.first().map { it.name }).containsExactly("Даня", "Миша", "Саша")
         }

@@ -35,6 +35,12 @@ data class ExerciseSetPoint(
     val reps: Int,
 )
 
+/** Вес и число подходов с ним — для подбора шага тренажёра по записям. */
+data class WeightUsage(
+    val weightKg: Double,
+    val sets: Int,
+)
+
 /** Суммарное КБЖУ за день. */
 data class DayNutritionTotal(
     val epochDay: Long,

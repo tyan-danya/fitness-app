@@ -3,15 +3,19 @@ package com.dtyan.fitdiary.ui.workout
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
+import com.dtyan.fitdiary.domain.ManualStepRegistry
+import com.dtyan.fitdiary.domain.WeightSteps
 import com.dtyan.fitdiary.ui.common.Format
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 data class ExerciseLogUiState(
     val exerciseName: String = "",
@@ -22,10 +26,20 @@ data class ExerciseLogUiState(
     val previousLoaded: Boolean = false,
     val photoPath: String? = null,
     val equipment: String = "",
-    val weightStepKg: Double = 2.5,
+    val weightStepKg: Double = ExerciseLogViewModel.DEFAULT_STEP,
+    /** Шкала по собственным записям; null — записей мало или шкала неочевидна. */
+    val stepGuess: WeightSteps.StepGuess? = null,
+    /** Начало шкалы текущего шага: кнопки ± ходят по делениям stepBase + k·weightStepKg. */
+    val stepBase: Double = 0.0,
+    /** Шаг подобран по записям автоматически в этом сеансе — экран поясняет, откуда он. */
+    val stepFromHistory: Boolean = false,
     val saving: Boolean = false,
     val error: String? = null,
-)
+) {
+    /** Текущий шаг совпадает с найденным по записям. */
+    val stepMatchesGuess: Boolean
+        get() = stepGuess != null && ExerciseLogViewModel.sameStep(stepGuess.step, weightStepKg)
+}
 
 /** One immutable workout/athlete + exercise identity; drafts cannot leak between participants. */
 class ExerciseLogViewModel(
@@ -34,6 +48,7 @@ class ExerciseLogViewModel(
     private val workoutRepository: WorkoutRepository,
     private val exerciseRepository: ExerciseRepository,
     private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
+    private val manualSteps: ManualStepRegistry? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ExerciseLogUiState())
     val uiState: StateFlow<ExerciseLogUiState> = _uiState.asStateFlow()
@@ -45,6 +60,8 @@ class ExerciseLogViewModel(
     val repsText = savedStateHandle.getStateFlow("reps", "")
     private val _prEvents = Channel<Unit>(Channel.BUFFERED)
     val prEvents = _prEvents.receiveAsFlow()
+    /** Вес → число подходов по всем тренировкам: из этого берутся шкала и её начало. */
+    private var usage: Map<Double, Int> = emptyMap()
 
     /** Избранное принадлежит участнику этой тренировки, а не профилю, выбранному в шапке. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -60,10 +77,12 @@ class ExerciseLogViewModel(
                 val date = previous.firstOrNull()?.let { workoutRepository.getWorkoutOnce(it.workoutId) }
                     ?.startedAt?.let { Format.dateShort(Format.local(it).toLocalDate()) }
                 val record = workoutRepository.maxWeight(exerciseId, workoutId)
+                val step = detectStep(exercise)
                 _uiState.update { it.copy(
                     exerciseName = exercise?.name.orEmpty(), muscleGroup = exercise?.muscleGroup.orEmpty(),
                     photoPath = exercise?.photoPath, equipment = exercise?.equipment.orEmpty(),
-                    weightStepKg = exercise?.weightStepKg ?: 2.5,
+                    weightStepKg = step.step, stepGuess = step.guess, stepBase = baseFor(step.step, step.guess),
+                    stepFromHistory = step.autoApplied,
                     recordWeightKg = record,
                     previousSets = previous, previousDateText = date, previousLoaded = true,
                 ) }
@@ -75,7 +94,8 @@ class ExerciseLogViewModel(
                 exerciseRepository.observeExercises().collect { exercises ->
                     exercises.firstOrNull { it.id == exerciseId }?.let { current ->
                         _uiState.update { it.copy(exerciseName = current.name, photoPath = current.photoPath,
-                            equipment = current.equipment, weightStepKg = current.weightStepKg) }
+                            equipment = current.equipment, weightStepKg = current.weightStepKg,
+                            stepBase = baseFor(current.weightStepKg, it.stepGuess)) }
                     }
                 }
             } catch (e: CancellationException) { throw e }
@@ -85,8 +105,18 @@ class ExerciseLogViewModel(
 
     fun onWeightTextChange(text: String) { savedStateHandle["touched"] = true; savedStateHandle["weight"] = text }
     fun onRepsTextChange(text: String) { savedStateHandle["touched"] = true; savedStateHandle["reps"] = text }
-    fun bumpWeight(delta: Double) = onWeightTextChange(Format.weight(
-        ((weightText.value.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0) + delta).coerceAtLeast(0.0)))
+    /**
+     * Знак [delta] — направление, величина — шаг (экран передаёт текущий). Вес ходит по шкале
+     * тренажёра: с деления — на соседнее, с веса вне шкалы — к ближайшему делению в ту же сторону.
+     */
+    fun bumpWeight(delta: Double) {
+        if (!delta.isFinite() || delta == 0.0) return
+        val state = _uiState.value
+        val step = abs(delta)
+        val base = if (sameStep(step, state.weightStepKg)) state.stepBase else WeightSteps.base(usage, step)
+        val current = weightText.value.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
+        onWeightTextChange(Format.weight(WeightSteps.bump(current, step, base, up = delta > 0)))
+    }
     fun bumpReps(delta: Int) = onRepsTextChange(((repsText.value.toIntOrNull() ?: 0).toLong() + delta).coerceIn(1, 999).toString())
     fun repeatPrevious() { _uiState.value.previousSets.lastOrNull()?.let {
         onWeightTextChange(Format.weight(it.weightKg)); onRepsTextChange(it.reps.toString())
@@ -139,9 +169,14 @@ class ExerciseLogViewModel(
             catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось изменить избранное. Попробуйте ещё раз.") } }
         }
     }
-    fun setWeightStep(step: Double) = mutate {
-        exerciseRepository.updateWeightStep(exerciseId, step)
-        _uiState.update { it.copy(weightStepKg = step) }
+    /** Шаг выбран человеком: сохраняется в упражнении и больше не подбирается автоматически. */
+    fun setWeightStep(step: Double) {
+        if (!step.isFinite() || step !in STEP_RANGE) return
+        mutate {
+            exerciseRepository.updateWeightStep(exerciseId, step)
+            manualSteps?.markWeightStepManual(exerciseId)
+            _uiState.update { it.copy(weightStepKg = step, stepBase = baseFor(step, it.stepGuess), stepFromHistory = false) }
+        }
     }
     fun completeExercise(onNext: (Long?) -> Unit) = mutate {
         require(workoutRepository.observeSetsForExercise(workoutId, exerciseId).first().isNotEmpty()) {
@@ -168,5 +203,41 @@ class ExerciseLogViewModel(
     private suspend fun refreshRecord() {
         val record = workoutRepository.maxWeight(exerciseId, workoutId)
         _uiState.update { it.copy(recordWeightKg = record) }
+    }
+
+    private class StepChoice(val step: Double, val guess: WeightSteps.StepGuess?, val autoApplied: Boolean)
+
+    /**
+     * Шкала по записям. Шаг тренажёра/блока, который ещё не меняли (2,5 по умолчанию), один раз
+     * заменяется найденным; выбранный человеком шаг не трогаем. Штанге и гантелям — только подсказка.
+     * Сбой подбора не мешает открыть упражнение: остаётся сохранённый шаг.
+     */
+    private suspend fun detectStep(exercise: Exercise?): StepChoice {
+        val stored = exercise?.weightStepKg ?: DEFAULT_STEP
+        if (exercise == null) return StepChoice(stored, null, false)
+        return try {
+            usage = exerciseRepository.weightUsage(exerciseId)
+            val guess = WeightSteps.guess(usage)
+            val applied = guess?.takeIf {
+                exercise.equipment in STACK_EQUIPMENT && sameStep(stored, DEFAULT_STEP) && !sameStep(it.step, stored) &&
+                    manualSteps?.isWeightStepManual(exerciseId) != true
+            }
+            if (applied != null) exerciseRepository.updateWeightStep(exerciseId, applied.step)
+            StepChoice(applied?.step ?: stored, guess, applied != null)
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) { StepChoice(stored, null, false) }
+    }
+
+    private fun baseFor(step: Double, guess: WeightSteps.StepGuess?): Double =
+        if (guess != null && sameStep(guess.step, step)) guess.base else WeightSteps.base(usage, step)
+
+    companion object {
+        const val DEFAULT_STEP = 2.5
+        /** Допустимый шаг, в том числе свой: от 0,1 до 50 кг. */
+        val STEP_RANGE = 0.1..50.0
+        /** Наборные стеки: шкала у каждого своя, поэтому шаг подбирается автоматически. */
+        val STACK_EQUIPMENT = setOf("Тренажёр", "Блок")
+
+        fun sameStep(a: Double, b: Double): Boolean = abs(a - b) < 1e-6
     }
 }

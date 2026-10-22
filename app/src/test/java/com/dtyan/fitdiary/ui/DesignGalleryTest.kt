@@ -11,7 +11,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.dtyan.fitdiary.AppContainer
@@ -27,7 +33,26 @@ import com.dtyan.fitdiary.data.repo.ActivityEntryInput
 import com.dtyan.fitdiary.data.repo.TemplatePlanItem
 import com.dtyan.fitdiary.domain.MealType
 import com.dtyan.fitdiary.domain.MeasurementType
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.dtyan.fitdiary.data.db.ActivityTimer
+import com.dtyan.fitdiary.data.repo.PlanBundleRepository
+import com.dtyan.fitdiary.domain.ActivityProgression
+import com.dtyan.fitdiary.export.PlanBundleExchange
+import com.dtyan.fitdiary.export.examplePlan
 import com.dtyan.fitdiary.ui.activity.ActivityScreen
+import com.dtyan.fitdiary.ui.activity.ActivityStopwatchPanel
+import com.dtyan.fitdiary.ui.activity.ActivityViewModel
+import com.dtyan.fitdiary.ui.common.FitSection
+import com.dtyan.fitdiary.ui.common.FitSectionScope
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import com.dtyan.fitdiary.ui.navigation.AppRoot
 import com.dtyan.fitdiary.ui.stats.WorkoutDetailsScreen
 import com.dtyan.fitdiary.ui.templates.TemplatesScreen
@@ -63,6 +88,7 @@ class DesignGalleryTest {
     private var finishedWorkoutId = 0L
     private var benchId = 0L
     private var screen by mutableStateOf("home")
+    private var plankId = 0L
 
     @Before fun seedDiary() {
         container = ApplicationProvider.getApplicationContext<FitDiaryApp>().container
@@ -128,13 +154,47 @@ class DesignGalleryTest {
                 container.activityRepository.saveEntry(it.id, ActivityEntryInput(epochDay = day, distanceKm = 3.2, steps = 4300,
                     durationSeconds = 38 * 60, clientToken = UUID.randomUUID().toString()), 1)
             }
-            definitions["pushup_standard"]?.let { pushups ->
-                listOf(20, 18, 15).forEach { reps ->
-                    container.activityRepository.saveEntry(pushups.id, ActivityEntryInput(epochDay = day, reps = reps,
-                        clientToken = UUID.randomUUID().toString()), 1)
+            suspend fun record(key: String, epochDay: Long = day, reps: Int? = null, seconds: Long? = null) {
+                definitions[key]?.let {
+                    container.activityRepository.saveEntry(it.id, ActivityEntryInput(epochDay = epochDay, reps = reps,
+                        durationSeconds = seconds, clientToken = UUID.randomUUID().toString()), 1)
                 }
             }
+            listOf(20, 18, 15).forEach { record("pushup_standard", reps = it) }
+            listOf(10, 10).forEach { record("pushup_narrow", reps = it) }
+            listOf(60, 45).forEach { record("pushup_standard", day - 1, reps = it) }
+            listOf(50, 50).forEach { record("pushup_wide", day - 2, reps = it) }
+            record("pushup_standard", day - 3, reps = 40)
+            record("plank", seconds = 35); record("plank", seconds = 34)
+            record("dip_assisted", reps = 10); record("dip_assisted", reps = 8)
             container.settings.setPushUpDailyGoal(100, 1)
+
+            // План недели как у владельца: сегодня силовая «C», программы A/B/C созданы импортом.
+            val todayDow = today.dayOfWeek.value
+            val program = { letter: String, title: String -> buildJsonObject {
+                put("name", "$letter — $title")
+                put("exercises", buildJsonArray {
+                    add(buildJsonObject { put("name", "Жим штанги лёжа"); put("muscleGroup", "Грудь"); put("equipment", "Штанга")
+                        put("targetSets", 3); put("targetReps", 8) })
+                    add(buildJsonObject { put("name", "Тяга верхнего блока"); put("muscleGroup", "Спина"); put("equipment", "Блок")
+                        put("targetSets", 3); put("targetReps", 10) })
+                })
+            } }
+            val plan = JsonObject(examplePlan().toMutableMap().apply {
+                put("key", JsonPrimitive("strength-abc")); put("name", JsonPrimitive("Сохранить силу: A/B/C, ходьба и лёгкая активность"))
+                put("week", buildJsonArray { (1..7).forEach { dow -> add(buildJsonObject {
+                    put("dayOfWeek", dow)
+                    put("morning", "20–30 минут спокойной ходьбы, без утомления перед силовой.")
+                    put("strength", if (dow == todayDow) "C: контролируемый жим, тяга с опорой, лёгкие ноги и трицепс." else "Отдых от силовой A/B/C.")
+                    put("home", "По желанию планка 2×15–20 секунд.")
+                }) } })
+                put("templates", buildJsonArray { add(program("A", "жим и вертикальная тяга")); add(program("C", "контролируемый жим и тяга")) })
+            })
+            PlanBundleRepository(db, container.templateRepository, container.activityRepository)
+                .importPlan(PlanBundleExchange.parse(plan.toString()), 1)
+            plankId = definitions.getValue("plank").id
+            db.activityDao().insertTimer(ActivityTimer(plankId, 1, 0, System.currentTimeMillis() - 28_000, null, 28,
+                UUID.randomUUID().toString(), "test-clock"))
             container.exerciseRepository.setFavorite(benchId, true, 1)
             container.exerciseRepository.setFavorite(squatId, true, 1)
         }
@@ -158,7 +218,12 @@ class DesignGalleryTest {
 
     private fun show(name: String, anchor: String) {
         compose.runOnIdle { screen = name }
-        waitForText(anchor)
+        try {
+            waitForText(anchor)
+        } catch (failure: Throwable) {
+            File("build/design-renders/$name-semantics.txt").writeText(compose.onRoot().printToString())
+            throw failure
+        }
         compose.mainClock.advanceTimeBy(1_000)
     }
 
@@ -175,6 +240,14 @@ class DesignGalleryTest {
                         "activity" -> ActivityScreen(onBack = {})
                         "templates" -> TemplatesScreen(onBack = {}, onOpenWorkout = {})
                         "details" -> WorkoutDetailsScreen(finishedWorkoutId, {})
+                        "stopwatch" -> FitSectionScope(FitSection.WORKOUT) { Surface(color = MaterialTheme.colorScheme.background) {
+                            val vm: ActivityViewModel = viewModel { ActivityViewModel(container.activityRepository, 1L, container.settings) }
+                            val state by vm.state.collectAsState()
+                            state.definitions.firstOrNull { it.id == plankId }?.let { plank ->
+                                ActivityStopwatchPanel(plank, state.timers.firstOrNull { it.activityId == plankId },
+                                    ActivityProgression.calculate(plank, state.allEntries), "Даня", false, null, vm)
+                            }
+                        } }
                     }
                 }
             }
@@ -192,7 +265,13 @@ class DesignGalleryTest {
         show("picker", "Тяга верхнего блока"); capture("11-picker-$suffix")
         show("log", "Жим штанги лёжа"); capture("12-exercise-log-$suffix")
         show("activity", "Отжимания"); capture("13-activity-$suffix")
-        show("templates", "Верх тела"); capture("14-templates-$suffix")
+        compose.onNodeWithTag("activity-day-list").performScrollToNode(hasTestTag("pushup-week"))
+        capture("13b-activity-pushups-$suffix")
+        compose.onNodeWithTag("activity-day-list").performScrollToNode(hasText("История отжиманий"))
+        compose.onNodeWithText("История отжиманий").performClick()
+        waitForText("Все варианты отжиманий вместе"); capture("13c-pushup-history-$suffix")
+        show("stopwatch", "Результат для"); capture("16-stopwatch-$suffix")
+        show("templates", "Сохранить силу"); capture("14-templates-$suffix")
         show("details", "Жим штанги лёжа"); capture("15-workout-details-$suffix")
     }
 

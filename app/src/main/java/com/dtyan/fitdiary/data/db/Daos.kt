@@ -303,6 +303,9 @@ interface WorkoutSetDao {
     suspend fun historyForExercise(exerciseId: Long, athleteId: Long = 1L): List<ExerciseSetPoint>
     @Query("SELECT DISTINCT s.exerciseId FROM workout_sets s JOIN workouts w ON w.id = s.workoutId WHERE w.athleteId = :athleteId")
     suspend fun usedExerciseIds(athleteId: Long = 1L): List<Long>
+    /** Сколько подходов сделано с каждым весом — по всем тренировкам и профилям (тренажёр общий). */
+    @Query("SELECT weightKg, COUNT(*) AS sets FROM workout_sets WHERE exerciseId = :exerciseId GROUP BY weightKg ORDER BY weightKg")
+    suspend fun weightUsage(exerciseId: Long): List<WeightUsage>
     @Insert
     suspend fun insert(set: WorkoutSet): Long
     @Update

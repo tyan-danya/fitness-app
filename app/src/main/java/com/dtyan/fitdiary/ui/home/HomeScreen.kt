@@ -29,7 +29,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.automirrored.rounded.ListAlt
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.FitnessCenter
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material.icons.rounded.GroupAdd
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.History
@@ -59,15 +64,25 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Workout
+import com.dtyan.fitdiary.data.db.WorkoutTemplate
+import com.dtyan.fitdiary.data.repo.PlanBundleRepository
 import com.dtyan.fitdiary.ui.common.ActionTile
 import com.dtyan.fitdiary.ui.common.EmptyState
+import com.dtyan.fitdiary.ui.common.FitButton
+import com.dtyan.fitdiary.ui.common.FitButtonKind
+import com.dtyan.fitdiary.ui.common.FitButtonRow
+import com.dtyan.fitdiary.ui.common.FitCard
 import com.dtyan.fitdiary.ui.common.FitDimens
+import com.dtyan.fitdiary.ui.common.IconBadge
+import com.dtyan.fitdiary.ui.common.sectionColors
 import com.dtyan.fitdiary.ui.common.FitSection
 import com.dtyan.fitdiary.ui.common.FitSectionScope
 import com.dtyan.fitdiary.ui.common.Format
@@ -98,12 +113,20 @@ fun HomeScreen(
     onOpenWorkoutDetails: (Long) -> Unit,
     onOpenTemplates: (() -> Unit)? = null,
     onOpenActivity: (() -> Unit)? = null,
+    onOpenStats: (() -> Unit)? = null,
+    onOpenBody: (() -> Unit)? = null,
 ) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     val chrome = LocalAppChrome.current
     val vm: HomeViewModel = viewModel {
-        HomeViewModel(container.workoutRepository, container.statsRepository)
+        HomeViewModel(
+            container.workoutRepository, container.statsRepository,
+            PlanBundleRepository(container.database, container.templateRepository, container.activityRepository),
+            container.templateRepository, container.activityRepository, container.settings,
+        )
     }
+    val todayPlan by vm.todayPlan.collectAsStateWithLifecycle()
+    val pushUpsToday by vm.pushUpsToday.collectAsStateWithLifecycle()
 
     val activeWorkout by vm.activeWorkout.collectAsStateWithLifecycle()
     val summaries by vm.summaries.collectAsStateWithLifecycle()
@@ -156,6 +179,14 @@ fun HomeScreen(
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
             }
 
+            todayPlan?.let { plan ->
+                item(key = "today_plan") {
+                    TodayPlanCard(plan, canStart = activeWorkout == null && !starting,
+                        onStart = { template -> vm.startTemplate(template.id, onOpenWorkout) },
+                        onOpenPlan = onOpenTemplates)
+                }
+            }
+
             item(key = "actions") {
                 val tiles = buildList<@Composable (Modifier) -> Unit> {
                     if (onOpenTemplates != null) add { m ->
@@ -164,7 +195,7 @@ fun HomeScreen(
                     }
                     if (onOpenActivity != null) add { m ->
                         ActionTile("Активность за день", Icons.AutoMirrored.Rounded.DirectionsWalk, onOpenActivity, m,
-                            subtitle = "Ходьба, планка, отжимания")
+                            subtitle = pushUpsToday?.let { "Отжимания: ${it.cleanReps} из ${it.target}" } ?: "Ходьба, планка, отжимания")
                     }
                     add { m ->
                         ActionTile(
@@ -195,11 +226,13 @@ fun HomeScreen(
                     maxItemsInEachRow = if (compactStats) 2 else 3,
                 ) {
                     StatChip(Icons.Rounded.LocalFireDepartment, fitAccents.nutrition, "${stats.weeklyStreak}",
-                        Format.plural(stats.weeklyStreak, "неделя подряд", "недели подряд", "недель подряд"), Modifier.weight(1f))
+                        Format.plural(stats.weeklyStreak, "неделя подряд", "недели подряд", "недель подряд"), Modifier.weight(1f),
+                        onClick = onOpenStats, onClickLabel = "Открыть статистику")
                     StatChip(Icons.Rounded.FitnessCenter, fitAccents.workout, "${stats.workoutsLast7Days}",
-                        "за 7 дней", Modifier.weight(1f))
+                        "за 7 дней", Modifier.weight(1f), onClick = onOpenStats, onClickLabel = "Открыть историю тренировок")
                     StatChip(Icons.Rounded.MonitorWeight, fitAccents.measure,
-                        latestWeight?.let { Format.weight(it.weightKg) } ?: "—", "вес, кг", Modifier.weight(1f))
+                        latestWeight?.let { Format.weight(it.weightKg) } ?: "—", "вес, кг", Modifier.weight(1f),
+                        onClick = onOpenBody, onClickLabel = "Открыть вес")
                 }
             }
 
@@ -267,6 +300,53 @@ fun HomeScreen(
         }) { Text(if (starting) "Готовим…" else "Начать") } },
         dismissButton = { TextButton(enabled = !starting, onClick = { choosingParticipants = false }) { Text("Отмена") } },
     )
+}
+
+private val WEEKDAYS = listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье")
+
+/**
+ * «Сегодня по плану»: день недели из загруженного плана — утро, силовая и дом. Если силовая названа
+ * буквой программы («C: …»), её можно начать отсюда; день можно перенести в «Моих программах».
+ */
+@Composable
+private fun TodayPlanCard(plan: TodayPlan, canStart: Boolean, onStart: (WorkoutTemplate) -> Unit, onOpenPlan: (() -> Unit)?) {
+    FitCard(onClick = onOpenPlan, onClickLabel = "Открыть план недели", spacing = 10.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconBadge(Icons.Rounded.CalendarMonth, size = 36.dp)
+            Column(Modifier.weight(1f)) {
+                Text("Сегодня по плану · ${WEEKDAYS[plan.dayOfWeek - 1]}", style = MaterialTheme.typography.titleSmall)
+                Text(plan.planName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        PlanLine(Icons.Rounded.WbTwilight, "Утро", plan.morning)
+        PlanLine(Icons.Rounded.FitnessCenter, "Силовая", plan.strength)
+        PlanLine(Icons.Rounded.Home, "Дома", plan.home)
+        val template = plan.template
+        FitButtonRow(
+            minWidthForRow = 320.dp,
+            first = { m ->
+                if (template != null) FitButton("Начать: ${template.name}", { onStart(template) }, m, icon = Icons.Rounded.PlayArrow,
+                    enabled = canStart)
+                else FitButton("Весь план", { onOpenPlan?.invoke() }, m, kind = FitButtonKind.Tonal, compact = true)
+            },
+            second = { m ->
+                FitButton("Перенести день", { onOpenPlan?.invoke() }, m, kind = FitButtonKind.Plain, compact = true,
+                    icon = Icons.Rounded.SwapHoriz)
+            },
+        )
+    }
+}
+
+@Composable
+private fun PlanLine(icon: ImageVector, label: String, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = sectionColors().accent, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
 }
 
 /** Приветствие по времени суток. */

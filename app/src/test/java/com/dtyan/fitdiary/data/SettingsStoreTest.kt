@@ -281,4 +281,20 @@ class SettingsStoreTest {
             assertThat(store.settings.value).isEqualTo(beforeState)
         }
     }
+
+    @Test
+    fun manualWeightStepsPersistOnDeviceButStayOutOfBackups() = runTest {
+        val store = SettingsStore(context, MutableStateFlow(1L))
+        assertThat(store.isWeightStepManual(7)).isFalse()
+        store.markWeightStepManual(7)
+        store.markWeightStepManual(3)
+        store.markWeightStepManual(7)
+        val reopened = SettingsStore(context, MutableStateFlow(1L))
+        assertThat(reopened.isWeightStepManual(7)).isTrue()
+        assertThat(reopened.isWeightStepManual(3)).isTrue()
+        assertThat(reopened.isWeightStepManual(5)).isFalse()
+        assertThat(reopened.exportSafeSettings()).doesNotContain("manualWeightSteps")
+        reopened.restoreSafeSettings(reopened.exportSafeSettings())
+        assertThat(reopened.isWeightStepManual(7)).isTrue()
+    }
 }
