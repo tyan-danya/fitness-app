@@ -67,6 +67,7 @@ object Routes {
     const val ACTIVE_WORKOUT = "workout/{workoutId}"
     const val EXERCISE_PICKER = "workout/{workoutId}/pick"
     const val EXERCISE_LOG = "workout/{workoutId}/exercise/{exerciseId}"
+    const val EXERCISE_REPLACE = "workout/{workoutId}/replace/{exerciseId}"
     const val DAY_DETAILS = "stats/day/{epochDay}"
     const val WORKOUT_DETAILS = "stats/workout/{workoutId}"
     const val TEMPLATES = "templates?sourceWorkoutId={sourceWorkoutId}"
@@ -74,6 +75,7 @@ object Routes {
     fun activeWorkout(workoutId: Long) = "workout/$workoutId"
     fun exercisePicker(workoutId: Long) = "workout/$workoutId/pick"
     fun exerciseLog(workoutId: Long, exerciseId: Long) = "workout/$workoutId/exercise/$exerciseId"
+    fun exerciseReplace(workoutId: Long, exerciseId: Long) = "workout/$workoutId/replace/$exerciseId"
     fun dayDetails(epochDay: Long) = "stats/day/$epochDay"
     fun workoutDetails(workoutId: Long) = "stats/workout/$workoutId"
     fun templates(sourceWorkoutId: Long? = null) = "templates?sourceWorkoutId=${sourceWorkoutId ?: 0L}"
@@ -221,6 +223,31 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
                         navController.popBackStack(Routes.HOME, inclusive = false)
                     },
                     onSaveTemplate = { id -> navController.navigate(Routes.templates(id)) },
+                    onReplaceExercise = { selectedWorkoutId, exerciseId ->
+                        navController.navigate(Routes.exerciseReplace(selectedWorkoutId, exerciseId))
+                    },
+                )
+            }
+            composable(
+                Routes.EXERCISE_REPLACE,
+                arguments = listOf(
+                    navArgument("workoutId") { type = NavType.LongType },
+                    navArgument("exerciseId") { type = NavType.LongType },
+                ),
+            ) { entry ->
+                val workoutId = entry.arguments?.getLong("workoutId") ?: return@composable
+                val exerciseId = entry.arguments?.getLong("exerciseId") ?: return@composable
+                ExercisePickerScreen(
+                    workoutId = workoutId,
+                    onExerciseChosen = {},
+                    onBack = { navController.popBackStack() },
+                    replaceExerciseId = exerciseId,
+                    onReplaced = { newExerciseId ->
+                        // Замена встала в тренировку — сразу к ней; старый экран подходов и каталог уходят из стека.
+                        if (newExerciseId != null) navController.navigate(Routes.exerciseLog(workoutId, newExerciseId)) {
+                            popUpTo(Routes.ACTIVE_WORKOUT)
+                        } else navController.popBackStack()
+                    },
                 )
             }
             composable(
@@ -263,6 +290,9 @@ private fun ProfileNavigation(requestedTab: String?, requestNonce: Int) {
                             popUpTo(Routes.ACTIVE_WORKOUT) { inclusive = true }
                             launchSingleTop = true
                         }
+                    },
+                    onReplaceExercise = { selectedWorkoutId, oldExerciseId ->
+                        navController.navigate(Routes.exerciseReplace(selectedWorkoutId, oldExerciseId))
                     },
                 )
             }

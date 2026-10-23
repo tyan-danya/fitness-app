@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -41,7 +42,7 @@ data class TemplateDraft(val id: Long? = null, val name: String = "", val rows: 
 /** The owner is captured when this screen is opened, including during system file pickers. */
 class TemplatesViewModel(
     private val repository: TemplateRepository,
-    exerciseRepository: ExerciseRepository,
+    private val exerciseRepository: ExerciseRepository,
     private val ownerId: Long,
     private val savedState: SavedStateHandle = SavedStateHandle(),
     private val plans: PlanBundleRepository? = null,
@@ -50,6 +51,11 @@ class TemplatesViewModel(
     val exercises = exerciseRepository.observeExercises().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     /** Избранное владельца программы — в каталоге выбора оно идёт первым. */
     val favoriteIds = exerciseRepository.observeFavoriteIds(ownerId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    /** «Не нравится» владельца: такие упражнения помечены в программах, в каталоге идут последними. */
+    val dislikedIds = exerciseRepository.observeDislikedIds(ownerId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    /** Состав каждой программы — карточка показывает его без открытия редактора. */
+    val itemsByTemplate = repository.observeItemRefs(ownerId).map { refs -> refs.groupBy { it.templateId } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     private val _draft = MutableStateFlow(decodeDraft(savedState["templateDraft"]))
     val draft = _draft.asStateFlow()
     private val _busy = MutableStateFlow(false)
@@ -80,6 +86,29 @@ class TemplatesViewModel(
         }
     }
     fun removeExercise(id: Long) { updateDraft { it.copy(rows = it.rows.filterNot { row -> row.exerciseId == id }) } }
+    /**
+     * Замена в черновике: новое упражнение на том же месте с прежними подходами и повторами.
+     * Заметка старого к нему не подходит — вместо неё пометка, что это замена. Сохраняет «Сохранить программу».
+     */
+    fun replaceExercise(oldId: Long, exercise: Exercise) {
+        updateDraft { draft ->
+            if (exercise.id == oldId || draft.rows.any { it.exerciseId == exercise.id }) draft
+            else draft.copy(rows = draft.rows.map { row ->
+                if (row.exerciseId != oldId) row
+                else row.copy(exerciseId = exercise.id, name = exercise.name, muscleGroup = exercise.muscleGroup,
+                    note = TemplateRepository.replacementNote(row.name))
+            })
+        }
+    }
+    /** «Не нравится» прямо из программы: отметка общая для каталога и тренировок владельца. */
+    fun toggleDislike(exerciseId: Long) {
+        val disliked = exerciseId !in dislikedIds.value
+        viewModelScope.launch {
+            try { exerciseRepository.setDisliked(exerciseId, disliked, ownerId) }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _error.value = "Не удалось изменить отметку. Попробуйте ещё раз." }
+        }
+    }
     fun moveExercise(id: Long, delta: Int) {
         updateDraft { draft ->
             val index = draft.rows.indexOfFirst { it.exerciseId == id }

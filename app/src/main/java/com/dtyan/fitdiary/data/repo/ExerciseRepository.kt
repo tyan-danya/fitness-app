@@ -2,7 +2,6 @@ package com.dtyan.fitdiary.data.repo
 
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseDao
-import com.dtyan.fitdiary.data.db.FavoriteExercise
 import com.dtyan.fitdiary.data.db.WorkoutSetDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,11 +66,26 @@ class ExerciseRepository(
     fun observeFavoriteIds(athleteId: Long = activeAthleteId.value): Flow<Set<Long>> =
         exerciseDao.observeFavoriteIds(athleteId).map { it.toSet() }.distinctUntilChanged()
 
-    /** Отметить/снять избранное. Идемпотентно: повтор не меняет время добавления и не падает. */
+    /**
+     * Отметить/снять избранное. Идемпотентно: повтор не меняет время добавления и не падает.
+     * Избранное снимает отметку «Не нравится».
+     */
     suspend fun setFavorite(exerciseId: Long, favorite: Boolean, athleteId: Long = activeAthleteId.value) {
         require(athleteId > 0) { "Профиль не выбран" }
         require(exerciseId > 0) { "Упражнение не выбрано" }
-        if (favorite) exerciseDao.insertFavorite(FavoriteExercise(athleteId, exerciseId, System.currentTimeMillis()))
+        if (favorite) exerciseDao.markFavorite(athleteId, exerciseId, System.currentTimeMillis())
         else exerciseDao.deleteFavorite(athleteId, exerciseId)
+    }
+
+    /** id упражнений с отметкой «Не нравится» у профиля; профиль фиксируется в момент вызова. */
+    fun observeDislikedIds(athleteId: Long = activeAthleteId.value): Flow<Set<Long>> =
+        exerciseDao.observeDislikedIds(athleteId).map { it.toSet() }.distinctUntilChanged()
+
+    /** Отметить/снять «Не нравится». Отметка снимает избранное; повтор ничего не меняет. */
+    suspend fun setDisliked(exerciseId: Long, disliked: Boolean, athleteId: Long = activeAthleteId.value) {
+        require(athleteId > 0) { "Профиль не выбран" }
+        require(exerciseId > 0) { "Упражнение не выбрано" }
+        if (disliked) exerciseDao.markDisliked(athleteId, exerciseId, System.currentTimeMillis())
+        else exerciseDao.deleteDislike(athleteId, exerciseId)
     }
 }

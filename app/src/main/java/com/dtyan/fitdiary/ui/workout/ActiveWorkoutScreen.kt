@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.dtyan.fitdiary.ui.workout
 
 import androidx.compose.foundation.clickable
@@ -14,6 +16,10 @@ import androidx.compose.material.icons.rounded.Bookmarks
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbDownOffAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,6 +37,7 @@ import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.ui.common.DetailTopBar
+import com.dtyan.fitdiary.ui.common.DislikedPill
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.FitButton
 import com.dtyan.fitdiary.ui.common.FitButtonKind
@@ -52,6 +59,8 @@ fun ActiveWorkoutScreen(
     onOpenExercise: (Long, Long) -> Unit,
     onWorkoutClosed: () -> Unit,
     onSaveTemplate: ((Long) -> Unit)? = null,
+    /** Подобрать замену: (тренировка участника, упражнение). */
+    onReplaceExercise: ((Long, Long) -> Unit)? = null,
 ) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     var selectedId by rememberSaveable(workoutId) { mutableStateOf(workoutId) }
@@ -79,6 +88,7 @@ fun ActiveWorkoutScreen(
         },
         onGroupClosed = onWorkoutClosed,
         onSaveTemplate = onSaveTemplate?.let { { it(selected.id) } },
+        onReplace = onReplaceExercise?.let { replace -> { exerciseId: Long -> replace(selected.id, exerciseId) } },
     )
 }
 
@@ -94,10 +104,11 @@ private fun ActiveAthleteWorkout(
     onIndividualClosed: () -> Unit,
     onGroupClosed: () -> Unit,
     onSaveTemplate: (() -> Unit)?,
+    onReplace: ((Long) -> Unit)?,
 ) {
     val container = LocalContext.current.appContainer
     val vm: ActiveWorkoutViewModel = viewModel(key = "active_workout_${selected.id}") {
-        ActiveWorkoutViewModel(selected.id, container.workoutRepository)
+        ActiveWorkoutViewModel(selected.id, container.workoutRepository, container.exerciseRepository)
     }
     val groups by vm.exerciseGroups.collectAsStateWithLifecycle()
     val sets by vm.sets.collectAsStateWithLifecycle()
@@ -110,7 +121,9 @@ private fun ActiveAthleteWorkout(
     var weights by rememberSaveable(selected.id) { mutableStateOf<Map<Long, String>>(emptyMap()) }
     val active = participants.filter { it.endedAt == null }
     val planned = groups.filter { it.planned }
-    val next = planned.firstOrNull { !it.completed }
+    val done = planned.count { it.completed }
+    val skipped = planned.count { it.skipped }
+    val next = planned.firstOrNull { !it.completed && !it.skipped }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -154,14 +167,20 @@ private fun ActiveAthleteWorkout(
             if (planned.isNotEmpty()) item("plan_progress") {
                 val colors = sectionColors()
                 FitCard(color = colors.container, contentColor = colors.onContainer) {
-                    Text("План: ${planned.count { it.completed }} из ${planned.size}", style = MaterialTheme.typography.titleMedium)
+                    Text("План: $done из ${planned.size}" + if (skipped > 0) " · пропущено: $skipped" else "",
+                        style = MaterialTheme.typography.titleMedium)
                     LinearProgressIndicator(
-                        progress = { planned.count { it.completed }.toFloat() / planned.size },
+                        progress = { (done + skipped).toFloat() / planned.size },
                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(MaterialTheme.shapes.small),
                         color = colors.accent, trackColor = MaterialTheme.colorScheme.surface, gapSize = 0.dp, drawStopIndicator = {},
                     )
-                    if (next != null) FitButton("Следующее: ${next.name}", { onOpenExercise(next.exerciseId) }, Modifier.fillMaxWidth(),
-                        icon = Icons.AutoMirrored.Rounded.ArrowForward, enabled = !busy)
+                    if (next != null) {
+                        FitButton("Следующее: ${next.name}", { onOpenExercise(next.exerciseId) }, Modifier.fillMaxWidth(),
+                            icon = Icons.AutoMirrored.Rounded.ArrowForward, enabled = !busy)
+                        // Не делаете его сегодня — пропуск убирает его из «Следующего» только в этой тренировке.
+                        FitButton("Пропустить в этой тренировке", { vm.skip(next.exerciseId, true) }, kind = FitButtonKind.Plain,
+                            compact = true, icon = Icons.Rounded.SkipNext, enabled = !busy)
+                    }
                     else Text("Все упражнения отмечены. Можно завершать тренировку.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -173,7 +192,10 @@ private fun ActiveAthleteWorkout(
             items(groups, key = { it.exerciseId }) { group ->
                 ExerciseGroupCard(group, !busy,
                     onToggleComplete = { vm.markComplete(group.exerciseId, !group.completed) },
-                    onClick = { if (!busy) onOpenExercise(group.exerciseId) })
+                    onClick = { if (!busy) onOpenExercise(group.exerciseId) },
+                    onSkip = { vm.skip(group.exerciseId, !group.skipped) },
+                    onToggleDislike = { vm.setDisliked(group.exerciseId, !group.disliked) },
+                    onReplace = onReplace?.let { replace -> { replace(group.exerciseId) } })
             }
         }
     }
@@ -247,14 +269,23 @@ internal fun planTarget(sets: Int?, reps: Int?): String? = when {
 }
 
 @Composable
-private fun ExerciseGroupCard(group: ExerciseGroupUi, enabled: Boolean, onToggleComplete: () -> Unit, onClick: () -> Unit) {
+private fun ExerciseGroupCard(
+    group: ExerciseGroupUi,
+    enabled: Boolean,
+    onToggleComplete: () -> Unit,
+    onClick: () -> Unit,
+    onSkip: () -> Unit,
+    onToggleDislike: () -> Unit,
+    onReplace: (() -> Unit)?,
+) {
     val colors = sectionColors()
     FitCard(onClick = onClick, onClickLabel = "Открыть упражнение", shape = MaterialTheme.shapes.medium,
-        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 12.dp)) {
+        contentPadding = PaddingValues(start = 12.dp, top = 12.dp, end = 4.dp, bottom = 12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             ExerciseGuideThumb(ExerciseGuides.resolve(group.name), group.photoPath, size = 56.dp, displayName = group.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(group.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (group.disliked) DislikedPill()
                 planTarget(group.targetSets, group.targetReps)?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -265,9 +296,22 @@ private fun ExerciseGroupCard(group: ExerciseGroupUi, enabled: Boolean, onToggle
                     group.sets.joinToString(" · ") { "${Format.weight(it.weightKg)} × ${it.reps}" },
                     style = MaterialTheme.typography.bodyMedium)
             }
+            OverflowMenu(buildList {
+                if (onReplace != null && group.planned && !group.completed) add(MenuAction("Заменить упражнение", Icons.Rounded.SwapHoriz, onClick = onReplace))
+                if (group.planned && !group.completed) add(MenuAction(if (group.skipped) "Вернуть в план" else "Пропустить в этой тренировке",
+                    Icons.Rounded.SkipNext, onClick = onSkip))
+                add(MenuAction(if (group.disliked) "Убрать «Не нравится»" else "Не нравится",
+                    if (group.disliked) Icons.Rounded.ThumbDownOffAlt else Icons.Rounded.ThumbDown, onClick = onToggleDislike))
+            }, contentDescription = "Действия: ${group.name}", enabled = enabled)
+        }
+        if (group.planned && group.skipped) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            StatusPill("Пропущено", Modifier.align(Alignment.CenterVertically), icon = Icons.Rounded.SkipNext,
+                container = colors.container, contentColor = colors.onContainer)
+            FitButton("Вернуть", onSkip, kind = FitButtonKind.Plain, compact = true, enabled = enabled)
         }
         // Одна отметка вместо статуса и кнопки: нажатие ставит или снимает «Выполнено».
-        if (group.planned) FilterChip(
+        else if (group.planned) FilterChip(
             selected = group.completed,
             onClick = onToggleComplete,
             enabled = enabled && (group.completed || group.sets.isNotEmpty()),

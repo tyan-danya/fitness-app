@@ -8,8 +8,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class, WorkoutTemplate::class, TemplateExercise::class, ActivityDefinition::class, ActivityEntry::class, ActivityTimer::class, ActivityPlan::class, FavoriteExercise::class],
-    version = 8,
+    entities = [Athlete::class, Exercise::class, Workout::class, WorkoutSet::class, Meal::class, WeightEntry::class, BodyMeasurement::class, WorkoutExercise::class, WorkoutTemplate::class, TemplateExercise::class, ActivityDefinition::class, ActivityEntry::class, ActivityTimer::class, ActivityPlan::class, FavoriteExercise::class, DislikedExercise::class],
+    version = 9,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -187,6 +187,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v9: отметка «Не нравится» у каждого профиля и пропуск упражнения в одной тренировке. */
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `disliked_exercises` (`athleteId` INTEGER NOT NULL, `exerciseId` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`athleteId`, `exerciseId`), " +
+                        "FOREIGN KEY(`athleteId`) REFERENCES `athletes`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION , " +
+                        "FOREIGN KEY(`exerciseId`) REFERENCES `exercises`(`id`) ON UPDATE NO ACTION ON DELETE NO ACTION )"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_disliked_exercises_exerciseId` ON `disliked_exercises` (`exerciseId`)")
+                db.execSQL("ALTER TABLE workout_exercises ADD COLUMN skippedAt INTEGER")
+            }
+        }
+
         /** Колбэк с предзаполнением каталога упражнений. */
         fun seedCallback(): Callback = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -198,7 +212,7 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "fitdiary.db")
                 .addCallback(seedCallback())
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
     }
 }

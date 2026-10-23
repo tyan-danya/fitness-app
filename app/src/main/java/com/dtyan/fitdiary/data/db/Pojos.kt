@@ -66,6 +66,14 @@ data class TemplateExerciseInfo(
 
 data class TemplateDetails(val template: WorkoutTemplate, val items: List<TemplateExerciseInfo>)
 
+/** Упражнение в составе программы: только то, что нужно списку программ. */
+data class TemplateItemRef(
+    val templateId: Long,
+    val exerciseId: Long,
+    val name: String,
+    val position: Int,
+)
+
 /** Goals and explicit completion belong to this participant's workout, not the template. */
 data class WorkoutPlanEntry(
     @Embedded val exercise: Exercise,
@@ -75,6 +83,7 @@ data class WorkoutPlanEntry(
     val targetReps: Int?,
     val note: String?,
     val completedAt: Long?,
+    val skippedAt: Long?,
     val setCount: Int,
 ) {
     @get:Ignore

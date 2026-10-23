@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.WorkoutSet
 import com.dtyan.fitdiary.data.repo.ExerciseRepository
+import com.dtyan.fitdiary.data.repo.TemplateRepository
 import com.dtyan.fitdiary.data.repo.WorkoutRepository
 import com.dtyan.fitdiary.domain.ManualStepRegistry
 import com.dtyan.fitdiary.domain.WeightSteps
@@ -49,6 +50,8 @@ class ExerciseLogViewModel(
     private val exerciseRepository: ExerciseRepository,
     private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
     private val manualSteps: ManualStepRegistry? = null,
+    /** Программы участника: после «Не нравится» в них тоже предлагается замена. */
+    private val templates: TemplateRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ExerciseLogUiState())
     val uiState: StateFlow<ExerciseLogUiState> = _uiState.asStateFlow()
@@ -63,10 +66,18 @@ class ExerciseLogViewModel(
     /** Вес → число подходов по всем тренировкам: из этого берутся шкала и её начало. */
     private var usage: Map<Double, Int> = emptyMap()
 
+    private val owner = flow { workoutRepository.getWorkoutOnce(workoutId)?.athleteId?.let { emit(it) } }
+
     /** Избранное принадлежит участнику этой тренировки, а не профилю, выбранному в шапке. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val favorite: StateFlow<Boolean> = flow { workoutRepository.getWorkoutOnce(workoutId)?.athleteId?.let { emit(it) } }
+    val favorite: StateFlow<Boolean> = owner
         .flatMapLatest { owner -> exerciseRepository.observeFavoriteIds(owner).map { exerciseId in it } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /** «Не нравится» — тоже отметка участника этой тренировки. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val disliked: StateFlow<Boolean> = owner
+        .flatMapLatest { owner -> exerciseRepository.observeDislikedIds(owner).map { exerciseId in it } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     init {
@@ -169,6 +180,25 @@ class ExerciseLogViewModel(
             catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось изменить избранное. Попробуйте ещё раз.") } }
         }
     }
+    /**
+     * Ставит или снимает «Не нравится». После новой отметки [onMarked] узнаёт, есть ли где заменить
+     * упражнение: в невыполненном плане этой тренировки или в программах участника.
+     */
+    fun toggleDislike(onMarked: (canReplace: Boolean) -> Unit = {}) {
+        val next = !disliked.value
+        viewModelScope.launch {
+            try {
+                val owner = requireNotNull(workoutRepository.getWorkoutOnce(workoutId)?.athleteId)
+                exerciseRepository.setDisliked(exerciseId, next, owner)
+                if (next) {
+                    val inPlan = workoutRepository.observePlan(workoutId).first()
+                        .any { it.exercise.id == exerciseId && it.completedAt == null }
+                    onMarked(inPlan || templates?.templatesWithExercise(exerciseId, owner)?.isNotEmpty() == true)
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { _uiState.update { it.copy(error = "Не удалось изменить отметку. Попробуйте ещё раз.") } }
+        }
+    }
     /** Шаг выбран человеком: сохраняется в упражнении и больше не подбирается автоматически. */
     fun setWeightStep(step: Double) {
         if (!step.isFinite() || step !in STEP_RANGE) return
@@ -183,13 +213,22 @@ class ExerciseLogViewModel(
             "Сначала запишите хотя бы один подход"
         }
         workoutRepository.markExerciseComplete(workoutId, exerciseId, true)
-        val remaining = workoutRepository.observePlan(workoutId).first()
-            .firstOrNull { it.completedAt == null && it.exercise.id != exerciseId }
-        onNext(remaining?.exercise?.id)
+        onNext(nextInPlan())
     }
     fun reopenExercise() = mutate {
         workoutRepository.markExerciseComplete(workoutId, exerciseId, false)
     }
+    /** «Пропустить в этой тренировке» — и сразу к следующему невыполненному упражнению. */
+    fun skipExercise(onNext: (Long?) -> Unit) = mutate {
+        workoutRepository.skipExercise(workoutId, exerciseId, true)
+        onNext(nextInPlan())
+    }
+    fun unskipExercise() = mutate {
+        workoutRepository.skipExercise(workoutId, exerciseId, false)
+    }
+    /** Первое по плану упражнение, которое не выполнено и не пропущено (кроме текущего). */
+    private suspend fun nextInPlan(): Long? = workoutRepository.observePlan(workoutId).first()
+        .firstOrNull { it.completedAt == null && it.skippedAt == null && it.exercise.id != exerciseId }?.exercise?.id
     private fun mutate(action: suspend () -> Unit) {
         if (_uiState.value.saving) return
         _uiState.update { it.copy(saving = true, error = null) }

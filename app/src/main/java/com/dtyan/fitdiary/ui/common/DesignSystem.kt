@@ -29,6 +29,8 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.ThumbDown
+import androidx.compose.material.icons.rounded.ThumbDownOffAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -353,6 +355,25 @@ fun FavoriteToggle(favorite: Boolean, onToggle: () -> Unit, name: String, modifi
             tint = if (favorite) fitAccents.gold else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/** «Не нравится»: палец вниз, закрашенный, когда отмечено. Пара к звёздочке избранного. */
+@Composable
+fun DislikeToggle(disliked: Boolean, onToggle: () -> Unit, name: String, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    IconToggleButton(checked = disliked, onCheckedChange = { onToggle() }, enabled = enabled, modifier = modifier) {
+        Icon(
+            imageVector = if (disliked) Icons.Rounded.ThumbDown else Icons.Rounded.ThumbDownOffAlt,
+            contentDescription = if (disliked) "Убрать «Не нравится»: $name" else "Не нравится: $name",
+            tint = if (disliked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Метка «Не нравится» в списках: в каталоге, программах и плане тренировки. */
+@Composable
+fun DislikedPill(modifier: Modifier = Modifier) {
+    StatusPill("Не нравится", modifier, icon = Icons.Rounded.ThumbDown,
+        container = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
 }
 
 /** Пункт меню «Ещё». */

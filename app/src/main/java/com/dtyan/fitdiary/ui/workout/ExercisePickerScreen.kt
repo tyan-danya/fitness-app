@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,9 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -53,6 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,7 @@ import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.ExerciseSeed
 import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.ui.common.DetailTopBar
+import com.dtyan.fitdiary.ui.common.DislikedPill
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.EmptyState
 import com.dtyan.fitdiary.ui.common.ExercisePhotoThumb
@@ -82,19 +87,29 @@ import kotlinx.coroutines.launch
 /** Значение фильтра «показывать все виды оборудования». */
 private const val EQUIPMENT_ALL = "Все"
 
+/**
+ * Каталог упражнений. С [replaceExerciseId] он подбирает замену: сверху похожие, а выбор
+ * подтверждается — где заменить (эта тренировка, программы участника). [onReplaced] получает
+ * новое упражнение, если оно встало в тренировку.
+ */
 @Composable
 fun ExercisePickerScreen(
     workoutId: Long,
     onExerciseChosen: (Long) -> Unit,
     onBack: () -> Unit,
+    replaceExerciseId: Long? = null,
+    onReplaced: (Long?) -> Unit = {},
 ) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
-    val vm: ExercisePickerViewModel = viewModel(key = "exercise_picker_$workoutId") {
-        ExercisePickerViewModel(container.exerciseRepository, workoutId, container.workoutRepository)
+    val vm: ExercisePickerViewModel = viewModel(key = "exercise_picker_${workoutId}_${replaceExerciseId ?: 0}") {
+        ExercisePickerViewModel(container.exerciseRepository, workoutId, container.workoutRepository,
+            replaceExerciseId, container.templateRepository)
     }
 
     val uiState by vm.uiState.collectAsStateWithLifecycle()
     val favoriteError by vm.error.collectAsStateWithLifecycle()
+    val targets by vm.replaceTargets.collectAsStateWithLifecycle()
+    var replacement by remember { mutableStateOf<Exercise?>(null) }
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var selectedEquipment by rememberSaveable { mutableStateOf(EQUIPMENT_ALL) }
@@ -103,6 +118,11 @@ fun ExercisePickerScreen(
     var choosing by remember { mutableStateOf(false) }
     var chooseError by remember { mutableStateOf<String?>(null) }
     fun choose(exerciseId: Long) {
+        if (replaceExerciseId != null) {
+            // Подтверждение покажет, где заменить; сам выбор ничего не меняет.
+            scope.launch { replacement = container.exerciseRepository.getById(exerciseId) }
+            return
+        }
         if (choosing) return
         choosing = true
         chooseError = null
@@ -125,7 +145,10 @@ fun ExercisePickerScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { DetailTopBar(title = "Выбор упражнения", onBack = onBack) },
+        topBar = {
+            if (replaceExerciseId == null) DetailTopBar(title = "Выбор упражнения", onBack = onBack)
+            else DetailTopBar(title = "Замена упражнения", subtitle = targets.exercise?.let { "Вместо: ${it.name}" }, onBack = onBack)
+        },
         floatingActionButton = {
             FitFab("Создать упражнение", Icons.Rounded.Add, onClick = { showCreateDialog = true })
         },
@@ -195,6 +218,19 @@ fun ExercisePickerScreen(
                 // Отступ снизу — чтобы FAB не перекрывал последние элементы.
                 contentPadding = PaddingValues(bottom = FitDimens.FabClearance),
             ) {
+                if (uiState.similar.isNotEmpty()) {
+                    item(key = "header_similar") {
+                        SectionHeader(
+                            icon = Icons.Rounded.SwapHoriz,
+                            title = "Похожие · ${targets.exercise?.muscleGroup.orEmpty()}",
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                    items(uiState.similar, key = { "similar_${it.id}" }) { exercise ->
+                        ExerciseRow(exercise, showGroup = true, favorite = exercise.id in uiState.favoriteIds,
+                            onToggleFavorite = { vm.toggleFavorite(exercise.id) }, onClick = { choose(exercise.id) }, replacing = true)
+                    }
+                }
                 if (uiState.favorites.isNotEmpty()) {
                     item(key = "header_favorites") {
                         SectionHeader(
@@ -206,7 +242,7 @@ fun ExercisePickerScreen(
                     }
                     items(uiState.favorites, key = { "favorite_${it.id}" }) { exercise ->
                         ExerciseRow(exercise, showGroup = true, favorite = true, onToggleFavorite = { vm.toggleFavorite(exercise.id) },
-                            onClick = { choose(exercise.id) })
+                            onClick = { choose(exercise.id) }, replacing = replaceExerciseId != null)
                     }
                 }
                 if (uiState.recent.isNotEmpty()) {
@@ -215,7 +251,7 @@ fun ExercisePickerScreen(
                     }
                     items(uiState.recent, key = { "recent_${it.id}" }) { exercise ->
                         ExerciseRow(exercise, showGroup = true, favorite = false, onToggleFavorite = { vm.toggleFavorite(exercise.id) },
-                            onClick = { choose(exercise.id) })
+                            onClick = { choose(exercise.id) }, replacing = replaceExerciseId != null)
                     }
                 }
 
@@ -230,7 +266,8 @@ fun ExercisePickerScreen(
                     }
                     items(exercises, key = { it.id }) { exercise ->
                         ExerciseRow(exercise, showGroup = false, favorite = exercise.id in uiState.favoriteIds,
-                            onToggleFavorite = { vm.toggleFavorite(exercise.id) }, onClick = { choose(exercise.id) })
+                            onToggleFavorite = { vm.toggleFavorite(exercise.id) }, onClick = { choose(exercise.id) },
+                            disliked = exercise.id in uiState.dislikedIds, replacing = replaceExerciseId != null)
                     }
                 }
 
@@ -250,6 +287,15 @@ fun ExercisePickerScreen(
         }
     }
 
+    replacement?.let { chosen ->
+        ReplaceConfirmDialog(targets, chosen,
+            onDismiss = { replacement = null },
+            onConfirm = { inWorkout, templateIds ->
+                replacement = null
+                vm.replace(chosen.id, inWorkout, templateIds, onReplaced)
+            })
+    }
+
     if (showCreateDialog) {
         CreateExerciseDialog(
             onDismiss = { orphanPhotoPath ->
@@ -267,6 +313,55 @@ fun ExercisePickerScreen(
     }
 }
 
+/**
+ * Где заменить: эта тренировка и программы участника, где стоит упражнение. По умолчанию — везде;
+ * подходы и повторы остаются прежними.
+ */
+@Composable
+private fun ReplaceConfirmDialog(
+    targets: ReplaceTargets,
+    chosen: Exercise,
+    onDismiss: () -> Unit,
+    onConfirm: (inWorkout: Boolean, templateIds: List<Long>) -> Unit,
+) {
+    var inWorkout by rememberSaveable(chosen.id, targets.loaded) { mutableStateOf(targets.inWorkout) }
+    var templateIds by rememberSaveable(chosen.id, targets.loaded) { mutableStateOf(targets.templates.map { it.id }) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Заменить на «${chosen.name}»?") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Вместо «${targets.exercise?.name.orEmpty()}». Подходы и повторы останутся прежними.")
+                if (!targets.inWorkout && targets.templates.isEmpty()) {
+                    Text("Упражнения нет ни в плане этой тренировки, ни в программах.", color = MaterialTheme.colorScheme.error)
+                }
+                if (targets.inWorkout) CheckRow("В этой тренировке", inWorkout) { inWorkout = it }
+                targets.templates.forEach { template ->
+                    CheckRow("В программе «${template.name}»", template.id in templateIds) { checked ->
+                        templateIds = if (checked) templateIds + template.id else templateIds - template.id
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(inWorkout && targets.inWorkout, templateIds) },
+                enabled = (inWorkout && targets.inWorkout) || templateIds.isNotEmpty()) { Text("Заменить") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена") } },
+    )
+}
+
+@Composable
+private fun CheckRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Checkbox) { onChange(!checked) }.heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 @Composable
 private fun ExerciseRow(
     exercise: Exercise,
@@ -274,11 +369,13 @@ private fun ExerciseRow(
     favorite: Boolean,
     onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
+    disliked: Boolean = false,
+    replacing: Boolean = false,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClickLabel = "Добавить в тренировку", onClick = onClick)
+            .clickable(onClickLabel = if (replacing) "Выбрать заменой" else "Добавить в тренировку", onClick = onClick)
             .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -302,6 +399,7 @@ private fun ExerciseRow(
                     StatusPill("своё", container = colors.container, contentColor = colors.onContainer)
                 }
             }
+            if (disliked) DislikedPill()
         }
         FavoriteToggle(favorite, onToggleFavorite, exercise.name)
     }

@@ -5,6 +5,7 @@ import com.dtyan.fitdiary.data.db.AppDatabase
 import com.dtyan.fitdiary.data.db.Exercise
 import com.dtyan.fitdiary.data.db.TemplateDetails
 import com.dtyan.fitdiary.data.db.TemplateExercise
+import com.dtyan.fitdiary.data.db.TemplateItemRef
 import com.dtyan.fitdiary.data.db.Workout
 import com.dtyan.fitdiary.data.db.WorkoutExercise
 import com.dtyan.fitdiary.data.db.WorkoutTemplate
@@ -92,6 +93,49 @@ class TemplateRepository(
             dao.update(old.copy(name = name.trim()))
             dao.deleteItems(id)
             dao.insertItems(rows(id, items))
+        }
+    }
+
+    /** Состав всех программ профиля в порядке упражнений. */
+    fun observeItemRefs(athleteId: Long): Flow<List<TemplateItemRef>> = dao.observeItemRefs(athleteId)
+
+    /** Программы профиля, где встречается упражнение: им предлагается та же замена. */
+    suspend fun templatesWithExercise(exerciseId: Long, athleteId: Long = currentAthleteId): List<WorkoutTemplate> =
+        dao.templatesWithExercise(exerciseId, athleteId)
+
+    /**
+     * Одна замена сразу в тренировке участника и в выбранных его программах, всё или ничего.
+     * Новое упражнение встаёт на место старого с прежними подходами и повторами; заметка
+     * старого к нему не подходит, поэтому вместо неё — откуда взялась замена.
+     */
+    suspend fun replaceExercise(
+        oldExerciseId: Long,
+        newExerciseId: Long,
+        workoutId: Long?,
+        templateIds: List<Long>,
+        athleteId: Long = currentAthleteId,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        require(oldExerciseId != newExerciseId) { "Выберите другое упражнение" }
+        require(workoutId != null || templateIds.isNotEmpty()) { "Выберите, где заменить" }
+        database.withTransaction {
+            requireAvailableAthlete(athleteId)
+            val old = requireNotNull(exerciseDao.getById(oldExerciseId)) { "Упражнение не найдено" }
+            val replacement = requireNotNull(exerciseDao.getById(newExerciseId)) { "Упражнение не найдено" }
+            require(!replacement.isArchived) { "Упражнение скрыто из каталога" }
+            val note = replacementNote(old.name)
+            if (workoutId != null) {
+                val workout = requireNotNull(workoutDao.getById(workoutId)) { "Тренировка не найдена" }
+                require(workout.athleteId == athleteId) { "Эта тренировка принадлежит другому профилю" }
+                workoutDao.replacePlanExercise(workoutId, oldExerciseId, newExerciseId, note, now)
+            }
+            templateIds.distinct().forEach { templateId ->
+                val template = requireOwnedTemplate(templateId, athleteId)
+                val items = dao.getItems(templateId)
+                require(items.any { it.exercise.id == oldExerciseId }) { "В программе «${template.name}» нет «${old.name}»" }
+                require(items.none { it.exercise.id == newExerciseId }) { "«${replacement.name}» уже есть в программе «${template.name}»" }
+                dao.replaceItem(templateId, oldExerciseId, newExerciseId, note)
+            }
         }
     }
 
@@ -203,6 +247,9 @@ class TemplateRepository(
         }
 
     companion object {
+        /** Заметка замены: прежняя относилась к старому упражнению и к новому не подходит. */
+        fun replacementNote(oldName: String): String = "Вместо «${clean(oldName).take(120)}»."
+
         /** Pure validation shared by preview parsing and the transaction that commits an import. */
         fun validateImport(name: String, items: List<ImportedTemplateExercise>) {
             validateNameAndSize(name, items.size)

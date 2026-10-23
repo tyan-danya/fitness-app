@@ -37,7 +37,9 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Straighten
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -90,6 +92,8 @@ import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.domain.WeightSteps
 import com.dtyan.fitdiary.ui.common.ConfettiBurst
 import com.dtyan.fitdiary.ui.common.DetailTopBar
+import com.dtyan.fitdiary.ui.common.DislikeToggle
+import com.dtyan.fitdiary.ui.common.DislikedPill
 import com.dtyan.fitdiary.ui.common.EmptyState
 import com.dtyan.fitdiary.ui.common.ExerciseGuideButton
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
@@ -133,6 +137,8 @@ fun ExerciseLogScreen(
     onBack: () -> Unit,
     onOpenExercise: ((Long, Long) -> Unit)? = null,
     onPlanComplete: ((Long) -> Unit)? = null,
+    /** Подобрать замену: (тренировка участника, упражнение). */
+    onReplaceExercise: ((Long, Long) -> Unit)? = null,
 ) = FitSectionScope(FitSection.WORKOUT) {
     val container = LocalContext.current.appContainer
     val groupFlow = remember(workoutId) { container.workoutRepository.observeGroupWorkouts(workoutId) }
@@ -163,6 +169,7 @@ fun ExerciseLogScreen(
             if (nextExerciseId != null && onOpenExercise != null) onOpenExercise(selected.id, nextExerciseId)
             else if (onPlanComplete != null) onPlanComplete(selected.id) else onBack()
         },
+        onReplace = onReplaceExercise?.let { replace -> { replace(selected.id, exerciseId) } },
     )
 }
 
@@ -177,6 +184,7 @@ private fun AthleteExerciseLogScreen(
     onNext: (() -> Unit)?,
     onBack: () -> Unit,
     onNextExercise: (Long?) -> Unit,
+    onReplace: (() -> Unit)?,
 ) {
     val container = LocalContext.current.appContainer
     val vm: ExerciseLogViewModel = viewModel(key = "exercise_log_${workoutId}_$exerciseId") {
@@ -187,6 +195,7 @@ private fun AthleteExerciseLogScreen(
             container.exerciseRepository,
             createSavedStateHandle(),
             container.settings,
+            container.templateRepository,
         )
     }
 
@@ -196,6 +205,8 @@ private fun AthleteExerciseLogScreen(
     val repsText by vm.repsText.collectAsStateWithLifecycle()
     val plan by vm.plan.collectAsStateWithLifecycle()
     val favorite by vm.favorite.collectAsStateWithLifecycle()
+    val disliked by vm.disliked.collectAsStateWithLifecycle()
+    var offerReplace by rememberSaveable(workoutId) { mutableStateOf(false) }
     val plannedExercise = plan.firstOrNull { it.exercise.id == exerciseId }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -258,7 +269,11 @@ private fun AthleteExerciseLogScreen(
                         .joinToString(" · ").ifEmpty { null },
                     onBack = onBack,
                     actions = {
-                        if (ui.exerciseName.isNotEmpty()) FavoriteToggle(favorite, vm::toggleFavorite, ui.exerciseName)
+                        if (ui.exerciseName.isNotEmpty()) {
+                            FavoriteToggle(favorite, vm::toggleFavorite, ui.exerciseName)
+                            DislikeToggle(disliked, { vm.toggleDislike { canReplace -> offerReplace = canReplace && onReplace != null } },
+                                ui.exerciseName)
+                        }
                     },
                 )
             },
@@ -303,6 +318,12 @@ private fun AthleteExerciseLogScreen(
                                 Text("Это ориентир. Запишите свой фактический вес и повторы.", style = MaterialTheme.typography.bodySmall)
                             }
                             planned.note?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                            if (disliked && planned.completedAt == null && onReplace != null) FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                DislikedPill(Modifier.align(Alignment.CenterVertically))
+                                FitButton("Подобрать замену", onReplace, kind = FitButtonKind.Plain, compact = true,
+                                    icon = Icons.Rounded.SwapHoriz, enabled = !ui.saving)
+                            }
                         }
                     }
                 }
@@ -330,22 +351,41 @@ private fun AthleteExerciseLogScreen(
                 }
 
                 if (plannedExercise != null) item(key = "complete_exercise") {
-                    if (plannedExercise.completedAt != null) {
-                        val colors = sectionColors()
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val colors = sectionColors()
+                    when {
+                        plannedExercise.completedAt != null -> Row(verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             StatusPill("Упражнение выполнено", icon = Icons.Rounded.CheckCircle, container = colors.container,
                                 contentColor = colors.onContainer)
                             FitButton("Вернуть в план", vm::reopenExercise, kind = FitButtonKind.Plain, compact = true, enabled = !ui.saving)
                         }
-                    } else {
-                        FitButton("Упражнение выполнено, дальше", {
-                            focusManager.clearFocus()
-                            vm.completeExercise(onNextExercise)
-                        }, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined, icon = Icons.Rounded.TaskAlt,
-                            enabled = !ui.saving && todaySets.isNotEmpty())
-                        Text(if (todaySets.isEmpty()) "Сначала запишите хотя бы один подход."
-                            else "Отмечает упражнение только для: $athleteName", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                        plannedExercise.skippedAt != null -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                StatusPill("Пропущено", Modifier.align(Alignment.CenterVertically),
+                                    icon = Icons.Rounded.SkipNext, container = colors.container, contentColor = colors.onContainer)
+                                FitButton("Вернуть в план", vm::unskipExercise, kind = FitButtonKind.Plain, compact = true, enabled = !ui.saving)
+                            }
+                            Text("Только в этой тренировке. Запишете подход — упражнение само вернётся в план.", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
+                        }
+                        else -> Column {
+                            FitButton("Упражнение выполнено, дальше", {
+                                focusManager.clearFocus()
+                                vm.completeExercise(onNextExercise)
+                            }, Modifier.fillMaxWidth(), kind = FitButtonKind.Outlined, icon = Icons.Rounded.TaskAlt,
+                                enabled = !ui.saving && todaySets.isNotEmpty())
+                            Text(if (todaySets.isEmpty()) "Сначала запишите хотя бы один подход."
+                                else "Отмечает упражнение только для: $athleteName", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                            FlowRow(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FitButton("Пропустить в этой тренировке", {
+                                    focusManager.clearFocus()
+                                    vm.skipExercise(onNextExercise)
+                                }, kind = FitButtonKind.Plain, compact = true, icon = Icons.Rounded.SkipNext, enabled = !ui.saving)
+                                if (onReplace != null) FitButton("Заменить", onReplace, kind = FitButtonKind.Plain, compact = true,
+                                    icon = Icons.Rounded.SwapHoriz, enabled = !ui.saving)
+                            }
+                        }
                     }
                 }
 
@@ -398,6 +438,15 @@ private fun AthleteExerciseLogScreen(
             },
         )
     }
+
+    if (offerReplace && onReplace != null) AlertDialog(
+        onDismissRequest = { offerReplace = false },
+        title = { Text("Не нравится: ${ui.exerciseName}") },
+        text = { Text("Отметка сохранена для: $athleteName. В каталоге упражнение уйдёт вниз, в программах будет помечено. " +
+            "Подобрать замену на его место?") },
+        confirmButton = { TextButton(onClick = { offerReplace = false; onReplace() }) { Text("Подобрать замену") } },
+        dismissButton = { TextButton(onClick = { offerReplace = false }) { Text("Не сейчас") } },
+    )
 
     deletingSet?.let { set ->
         AlertDialog(

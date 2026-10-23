@@ -66,12 +66,15 @@ class BackupManager(
         private val V7_TABLES = V6_TABLES + ACTIVITY_TABLES
         // Restored after athletes and exercises; deleted first (TABLES is cleared in reverse).
         private const val FAVORITES = "favorite_exercises"
-        private val TABLES = V7_TABLES + FAVORITES
+        private const val DISLIKES = "disliked_exercises"
+        private val V8_TABLES = V7_TABLES + FAVORITES
+        private val TABLES = V8_TABLES + DISLIKES
+        private val MARK_TABLES = setOf(FAVORITES, DISLIKES)
         private val V5_TABLES = V6_TABLES.filterNot { it in setOf("workout_templates", "template_exercises") }.toSet()
         /** Schema this build writes and restores; older portable documents are upgraded to it first. */
-        private const val SCHEMA_VERSION = 8
-        /** Older schema 5/6 backups and those of app 1.7–1.10 (schema 7) stay restorable. */
-        private val UPGRADABLE_VERSIONS = setOf(5, 6, 7)
+        private const val SCHEMA_VERSION = 9
+        /** Older schema 5/6 backups, those of app 1.7–1.10 (schema 7) and 1.11–1.12 (schema 8) stay restorable. */
+        private val UPGRADABLE_VERSIONS = setOf(5, 6, 7, 8)
         private val PHOTO_PATH = Regex("exercise_photos/[A-Za-z0-9_-]+\\.jpg")
     }
 
@@ -138,7 +141,7 @@ class BackupManager(
                     val order = when (table) {
                         "workout_exercises" -> "workoutId, position"
                         "template_exercises" -> "templateId, position"
-                        FAVORITES -> "athleteId, exerciseId"
+                        FAVORITES, DISLIKES -> "athleteId, exerciseId"
                         else -> "id"
                     }
                     sql.query("SELECT * FROM `$table` ORDER BY $order").use { cursor ->
@@ -282,7 +285,8 @@ class BackupManager(
         val expected = when (version) {
             5 -> V5_TABLES
             6 -> V6_TABLES.toSet()
-            else -> V7_TABLES.toSet()
+            7 -> V7_TABLES.toSet()
+            else -> V8_TABLES.toSet()
         }
         require(tables.keys == expected) { "Неполный набор таблиц старой копии" }
         val upgraded = tables.toMutableMap()
@@ -301,7 +305,15 @@ class BackupManager(
         }
         if (version == 5 || version == 6) ACTIVITY_TABLES.forEach { upgraded[it] = JsonArray(emptyList()) }
         // Favorites appeared in schema 8: an older diary simply has none.
-        upgraded[FAVORITES] = JsonArray(emptyList())
+        if (version != 8) upgraded[FAVORITES] = JsonArray(emptyList())
+        // Schema 9: «Не нравится» and skipping inside one workout; nothing was skipped before.
+        upgraded[DISLIKES] = JsonArray(emptyList())
+        val plan = upgraded["workout_exercises"] as? JsonArray ?: error("Отсутствует план тренировки")
+        upgraded["workout_exercises"] = JsonArray(plan.map { element ->
+            val row = element as? JsonObject ?: error("Некорректная запись плана")
+            require("skippedAt" !in row) { "Некорректная структура старого плана" }
+            JsonObject(row + ("skippedAt" to JsonNull))
+        })
         return JsonObject(document.toMutableMap().apply {
             put("schemaVersion", JsonPrimitive(SCHEMA_VERSION))
             put("tables", JsonObject(upgraded))
@@ -356,10 +368,16 @@ class BackupManager(
                     row["targetSets"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..100) { "Некорректная цель подходов" } }
                     row["targetReps"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.int in 1..999) { "Некорректная цель повторов" } }
                     row["note"]?.takeUnless { it == JsonNull }?.let { require(it.jsonPrimitive.content.length <= 500) { "Слишком длинное примечание" } }
+                    if (table == "workout_exercises") require(row["completedAt"] == JsonNull || row["skippedAt"] == JsonNull) {
+                        "Упражнение одновременно выполнено и пропущено"
+                    }
                 } else if (table == FAVORITES) {
                     // Composite key like a plan: one mark per profile and exercise, no own id.
                     require(compositeIds.add(row["athleteId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long)) { "Повторяющееся избранное упражнение" }
                     require(row["createdAt"]!!.jsonPrimitive.long >= 0) { "Некорректное время добавления в избранное" }
+                } else if (table == DISLIKES) {
+                    require(compositeIds.add(row["athleteId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long)) { "Повторяющаяся отметка «Не нравится»" }
+                    require(row["createdAt"]!!.jsonPrimitive.long >= 0) { "Некорректное время отметки «Не нравится»" }
                 } else {
                     val id = row.getValue("id").jsonPrimitive.long
                     require(id > 0 && rowIds.add(id)) { "Повторяющиеся идентификаторы" }
@@ -388,7 +406,7 @@ class BackupManager(
             it.jsonObject["id"]!!.jsonPrimitive.long == 1L && it.jsonObject["isArchived"]!!.jsonPrimitive.int == 0
         }) { "Основной профиль отсутствует или скрыт" }
         val profiles = ids.getValue("athletes")
-        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates", "activity_definitions", "activity_plans", FAVORITES)) {
+        for (table in listOf("workouts", "meals", "weight_entries", "body_measurements", "workout_templates", "activity_definitions", "activity_plans", FAVORITES, DISLIKES)) {
             tables[table]!!.jsonArray.forEach { require(it.jsonObject["athleteId"]!!.jsonPrimitive.long in profiles) { "Запись без профиля" } }
         }
         val workouts = tables["workouts"]!!.jsonArray.map { it.jsonObject }
@@ -421,6 +439,13 @@ class BackupManager(
         tables[FAVORITES]!!.jsonArray.forEach { element ->
             require(element.jsonObject["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Избранное ссылается на отсутствующее упражнение" }
         }
+        tables[DISLIKES]!!.jsonArray.forEach { element ->
+            require(element.jsonObject["exerciseId"]!!.jsonPrimitive.long in ids.getValue("exercises")) { "Отметка «Не нравится» ссылается на отсутствующее упражнение" }
+        }
+        val marks = MARK_TABLES.associateWith { table -> tables[table]!!.jsonArray.map { it.jsonObject.let { row ->
+            row["athleteId"]!!.jsonPrimitive.long to row["exerciseId"]!!.jsonPrimitive.long
+        } }.toSet() }
+        require(marks.getValue(FAVORITES).none { it in marks.getValue(DISLIKES) }) { "Упражнение одновременно в избранном и в «Не нравится»" }
         val templateItems = tables["template_exercises"]!!.jsonArray.groupBy { it.jsonObject["templateId"]!!.jsonPrimitive.long }
         ids.getValue("workout_templates").forEach { require((templateItems[it]?.size ?: 0) in 1..100) { "В программе должно быть от 1 до 100 упражнений" } }
         tables["weight_entries"]!!.jsonArray.forEach { element ->

@@ -66,6 +66,28 @@ interface ExerciseDao {
     suspend fun insertFavorite(favorite: FavoriteExercise)
     @Query("DELETE FROM favorite_exercises WHERE athleteId = :athleteId AND exerciseId = :exerciseId")
     suspend fun deleteFavorite(athleteId: Long, exerciseId: Long)
+
+    /** Отметки «Не нравится» конкретного профиля в порядке добавления. */
+    @Query("SELECT exerciseId FROM disliked_exercises WHERE athleteId = :athleteId ORDER BY createdAt")
+    fun observeDislikedIds(athleteId: Long): Flow<List<Long>>
+    @Query("SELECT exerciseId FROM disliked_exercises WHERE athleteId = :athleteId ORDER BY createdAt")
+    suspend fun getDislikedIds(athleteId: Long): List<Long>
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDislike(dislike: DislikedExercise)
+    @Query("DELETE FROM disliked_exercises WHERE athleteId = :athleteId AND exerciseId = :exerciseId")
+    suspend fun deleteDislike(athleteId: Long, exerciseId: Long)
+
+    /** Избранное и «Не нравится» взаимоисключающие: новая отметка снимает противоположную. */
+    @Transaction
+    suspend fun markFavorite(athleteId: Long, exerciseId: Long, now: Long) {
+        deleteDislike(athleteId, exerciseId)
+        insertFavorite(FavoriteExercise(athleteId, exerciseId, now))
+    }
+    @Transaction
+    suspend fun markDisliked(athleteId: Long, exerciseId: Long, now: Long) {
+        deleteFavorite(athleteId, exerciseId)
+        insertDislike(DislikedExercise(athleteId, exerciseId, now))
+    }
 }
 
 @Dao
@@ -154,7 +176,7 @@ interface WorkoutDao {
         val workouts = athleteIds.map { existingMembers[it] ?: startForAthlete(it, now, groupId) }
         val sourcePlan = getPlanOnce(workouts.first().id)
         workouts.drop(1).filter { it.id !in existingActiveIds && it.athleteId !in existingMembers }.forEach { newcomer ->
-            sourcePlan.forEach { insertPlan(it.copy(workoutId = newcomer.id, completedAt = null)) }
+            sourcePlan.forEach { insertPlan(it.copy(workoutId = newcomer.id, completedAt = null, skippedAt = null)) }
         }
         return workouts
     }
@@ -184,7 +206,7 @@ interface WorkoutDao {
     suspend fun plannedExerciseIds(workoutId: Long): List<Long>
     @Query("SELECT * FROM workout_exercises WHERE workoutId = :workoutId ORDER BY position, exerciseId")
     suspend fun getPlanOnce(workoutId: Long): List<WorkoutExercise>
-    @Query("""SELECT e.*, p.workoutId, p.position, p.targetSets, p.targetReps, p.note, p.completedAt,
+    @Query("""SELECT e.*, p.workoutId, p.position, p.targetSets, p.targetReps, p.note, p.completedAt, p.skippedAt,
         (SELECT COUNT(*) FROM workout_sets s WHERE s.workoutId = p.workoutId AND s.exerciseId = p.exerciseId) AS setCount
         FROM workout_exercises p JOIN exercises e ON e.id = p.exerciseId
         WHERE p.workoutId = :workoutId ORDER BY p.position, p.exerciseId""")
@@ -199,14 +221,54 @@ interface WorkoutDao {
     suspend fun setPlanCompletion(workoutId: Long, exerciseId: Long, completedAt: Long?)
     @Query("SELECT COUNT(*) FROM workout_sets WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
     suspend fun countPlanSets(workoutId: Long, exerciseId: Long): Int
+    @Query("UPDATE workout_exercises SET skippedAt = :skippedAt WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
+    suspend fun setPlanSkipped(workoutId: Long, exerciseId: Long, skippedAt: Long?)
+    @Query("DELETE FROM workout_exercises WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
+    suspend fun deletePlan(workoutId: Long, exerciseId: Long)
+    @Query("UPDATE workout_exercises SET position = position + 1 WHERE workoutId = :workoutId AND position > :after")
+    suspend fun shiftPlanAfter(workoutId: Long, after: Int)
 
     @Transaction
     suspend fun markExerciseComplete(workoutId: Long, exerciseId: Long, done: Boolean, now: Long) {
-        val workout = requireNotNull(getById(workoutId)) { "Тренировка не найдена" }
-        require(workout.endedAt == null) { "Тренировка уже завершена" }
-        val plan = requireNotNull(getPlanOnce(workoutId).find { it.exerciseId == exerciseId }) { "Упражнение не найдено в плане" }
+        val plan = requireActivePlanEntry(workoutId, exerciseId)
         require(!done || countPlanSets(workoutId, exerciseId) > 0) { "Сначала запишите хотя бы один подход" }
         setPlanCompletion(workoutId, exerciseId, if (done) plan.completedAt ?: now else null)
+        if (done) setPlanSkipped(workoutId, exerciseId, null)
+    }
+
+    /** Пропуск действует только в этой тренировке: программа не меняется, отметку можно снять. */
+    @Transaction
+    suspend fun skipExercise(workoutId: Long, exerciseId: Long, skipped: Boolean, now: Long) {
+        val plan = requireActivePlanEntry(workoutId, exerciseId)
+        require(!skipped || plan.completedAt == null) { "Упражнение уже выполнено" }
+        setPlanSkipped(workoutId, exerciseId, if (skipped) plan.skippedAt ?: now else null)
+    }
+
+    /**
+     * Замена в плане этой тренировки: новое упражнение встаёт на место старого с теми же ориентирами.
+     * Начатое старое (с подходами) остаётся выполненным, а замена встаёт сразу после него.
+     */
+    @Transaction
+    suspend fun replacePlanExercise(workoutId: Long, oldExerciseId: Long, newExerciseId: Long, note: String?, now: Long) {
+        require(oldExerciseId != newExerciseId) { "Выберите другое упражнение" }
+        val old = requireActivePlanEntry(workoutId, oldExerciseId)
+        require(getPlanOnce(workoutId).none { it.exerciseId == newExerciseId }) { "Это упражнение уже есть в тренировке" }
+        val position = if (countPlanSets(workoutId, oldExerciseId) == 0) {
+            deletePlan(workoutId, oldExerciseId)
+            old.position
+        } else {
+            setPlanCompletion(workoutId, oldExerciseId, old.completedAt ?: now)
+            setPlanSkipped(workoutId, oldExerciseId, null)
+            shiftPlanAfter(workoutId, old.position)
+            old.position + 1
+        }
+        insertPlan(WorkoutExercise(workoutId, newExerciseId, position, old.targetSets, old.targetReps, note))
+    }
+
+    private suspend fun requireActivePlanEntry(workoutId: Long, exerciseId: Long): WorkoutExercise {
+        val workout = requireNotNull(getById(workoutId)) { "Тренировка не найдена" }
+        require(workout.endedAt == null) { "Тренировка уже завершена" }
+        return requireNotNull(getPlanOnce(workoutId).find { it.exerciseId == exerciseId }) { "Упражнение не найдено в плане" }
     }
 
     @Transaction
@@ -261,6 +323,18 @@ interface TemplateDao {
     suspend fun delete(id: Long, athleteId: Long)
     @Query("DELETE FROM template_exercises WHERE templateId = :templateId")
     suspend fun deleteItems(templateId: Long)
+
+    /** Состав всех программ профиля — для списка программ и пометок «Не нравится». */
+    @Query("""SELECT p.templateId, p.exerciseId, e.name, p.position FROM template_exercises p
+        JOIN workout_templates t ON t.id = p.templateId JOIN exercises e ON e.id = p.exerciseId
+        WHERE t.athleteId = :athleteId ORDER BY p.templateId, p.position, p.exerciseId""")
+    fun observeItemRefs(athleteId: Long): Flow<List<TemplateItemRef>>
+    @Query("""SELECT t.* FROM workout_templates t WHERE t.athleteId = :athleteId
+        AND EXISTS (SELECT 1 FROM template_exercises p WHERE p.templateId = t.id AND p.exerciseId = :exerciseId)
+        ORDER BY t.id DESC""")
+    suspend fun templatesWithExercise(exerciseId: Long, athleteId: Long): List<WorkoutTemplate>
+    @Query("UPDATE template_exercises SET exerciseId = :newExerciseId, note = :note WHERE templateId = :templateId AND exerciseId = :oldExerciseId")
+    suspend fun replaceItem(templateId: Long, oldExerciseId: Long, newExerciseId: Long, note: String?)
 }
 
 @Dao
@@ -331,10 +405,16 @@ interface WorkoutSetDao {
         return indexed.copy(id = insert(indexed))
     }
 
+    @Query("UPDATE workout_exercises SET skippedAt = NULL WHERE workoutId = :workoutId AND exerciseId = :exerciseId")
+    suspend fun clearPlanSkip(workoutId: Long, exerciseId: Long)
+
+    /** Записанный подход возвращает пропущенное упражнение в план: его всё-таки делают. */
     @Transaction
     suspend fun recordSet(set: WorkoutSet, athleteId: Long): Pair<WorkoutSet, Pair<Double?, Double?>> {
         val previous = maxWeight(set.exerciseId, athleteId) to maxE1Rm(set.exerciseId, athleteId)
-        return insertWithNextIndex(set) to previous
+        val saved = insertWithNextIndex(set)
+        clearPlanSkip(set.workoutId, set.exerciseId)
+        return saved to previous
     }
 }
 

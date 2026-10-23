@@ -56,6 +56,10 @@ class WorkoutRepository(
     suspend fun markExerciseComplete(workoutId: Long, exerciseId: Long, done: Boolean, now: Long = System.currentTimeMillis()) =
         workoutDao.markExerciseComplete(workoutId, exerciseId, done, now)
 
+    /** «Пропустить в этой тренировке»: план и программа не меняются, снова предлагать его не будем. */
+    suspend fun skipExercise(workoutId: Long, exerciseId: Long, skipped: Boolean, now: Long = System.currentTimeMillis()) =
+        workoutDao.skipExercise(workoutId, exerciseId, skipped, now)
+
     suspend fun repeatWorkout(
         sourceWorkoutId: Long,
         athleteIds: List<Long> = listOf(activeAthleteId.value),

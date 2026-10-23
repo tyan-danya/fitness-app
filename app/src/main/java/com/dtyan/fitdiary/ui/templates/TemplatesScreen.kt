@@ -39,6 +39,8 @@ import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.ThumbDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -69,11 +71,14 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dtyan.fitdiary.appContainer
 import com.dtyan.fitdiary.data.db.Exercise
+import com.dtyan.fitdiary.data.db.TemplateItemRef
 import com.dtyan.fitdiary.data.db.WorkoutTemplate
 import com.dtyan.fitdiary.data.repo.PlanBundleRepository
 import com.dtyan.fitdiary.export.PlanBundleExchange
 import com.dtyan.fitdiary.domain.ExerciseGuides
 import com.dtyan.fitdiary.ui.common.DetailTopBar
+import com.dtyan.fitdiary.ui.common.DislikeToggle
+import com.dtyan.fitdiary.ui.common.DislikedPill
 import com.dtyan.fitdiary.ui.common.ExerciseGuideThumb
 import com.dtyan.fitdiary.ui.common.FitButton
 import com.dtyan.fitdiary.ui.common.FitButtonKind
@@ -132,6 +137,8 @@ private fun TemplateScreenContent(
     val templates by vm.templates.collectAsStateWithLifecycle()
     val exercises by vm.exercises.collectAsStateWithLifecycle()
     val favoriteIds by vm.favoriteIds.collectAsStateWithLifecycle()
+    val dislikedIds by vm.dislikedIds.collectAsStateWithLifecycle()
+    val itemsByTemplate by vm.itemsByTemplate.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
@@ -144,6 +151,8 @@ private fun TemplateScreenContent(
     val ownerName = allProfiles.firstOrNull { it.id == ownerId }?.name ?: "Участник"
     val focus = LocalFocusManager.current
     var choosingExercises by rememberSaveable { mutableStateOf(false) }
+    // Не null — каталог подбирает замену этому упражнению черновика.
+    var replacingId by rememberSaveable { mutableStateOf<Long?>(null) }
     var catalogQuery by rememberSaveable { mutableStateOf("") }
     var discard by rememberSaveable { mutableStateOf(false) }
     var deleteId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -164,7 +173,7 @@ private fun TemplateScreenContent(
     fun back() {
         if (busy) return
         when {
-            choosingExercises -> choosingExercises = false
+            choosingExercises -> { choosingExercises = false; replacingId = null }
             draft != null -> discard = true
             else -> onBack()
         }
@@ -177,6 +186,7 @@ private fun TemplateScreenContent(
         topBar = {
             DetailTopBar(
                 title = when {
+                    choosingExercises && replacingId != null -> "Замена упражнения"
                     choosingExercises -> "Выбрать упражнения"
                     draft != null -> if (draft?.id == null) "Новая программа" else "Редактор программы"
                     else -> "Мои программы"
@@ -188,22 +198,38 @@ private fun TemplateScreenContent(
         },
         bottomBar = {
             if (draft != null) Surface(color = MaterialTheme.colorScheme.background, shadowElevation = 4.dp) {
-                FitButton(if (busy) "Сохраняем…" else if (choosingExercises) "Готово · выбрано: ${draft?.rows?.size ?: 0}" else "Сохранить программу", {
+                FitButton(when {
+                    busy -> "Сохраняем…"
+                    choosingExercises && replacingId != null -> "Не заменять"
+                    choosingExercises -> "Готово · выбрано: ${draft?.rows?.size ?: 0}"
+                    else -> "Сохранить программу"
+                }, {
                     focus.clearFocus()
-                    if (choosingExercises) choosingExercises = false else vm.save()
-                }, Modifier.fillMaxWidth().padding(16.dp), enabled = !busy)
+                    if (choosingExercises) { choosingExercises = false; replacingId = null } else vm.save()
+                }, Modifier.fillMaxWidth().padding(16.dp), enabled = !busy,
+                    kind = if (choosingExercises && replacingId != null) FitButtonKind.Outlined else FitButtonKind.Filled)
             }
         },
     ) { padding ->
         val currentDraft = draft
         when {
-            choosingExercises && currentDraft != null -> TemplateCatalog(
-                exercises.sortedBy { if (it.id in favoriteIds) 0 else 1 }, favoriteIds, currentDraft.rows.map { it.exerciseId }.toSet(), catalogQuery,
-                { catalogQuery = it }, { vm.addExercise(it) }, Modifier.padding(padding),
-            )
+            choosingExercises && currentDraft != null -> {
+                val replacing = currentDraft.rows.firstOrNull { it.exerciseId == replacingId }
+                TemplateCatalog(
+                    exercises, favoriteIds, dislikedIds, currentDraft.rows.map { it.exerciseId }.toSet(), catalogQuery,
+                    { catalogQuery = it },
+                    onAdd = { exercise ->
+                        if (replacing == null) vm.addExercise(exercise)
+                        else { vm.replaceExercise(replacing.exerciseId, exercise); replacingId = null; choosingExercises = false }
+                    },
+                    replacing = replacing, modifier = Modifier.padding(padding),
+                )
+            }
             currentDraft != null -> TemplateEditor(
-                currentDraft, busy, error, message, ownerName, vm, exercises,
-                onAdd = { catalogQuery = ""; choosingExercises = true }, modifier = Modifier.padding(padding),
+                currentDraft, busy, error, message, ownerName, vm, exercises, dislikedIds,
+                onAdd = { catalogQuery = ""; replacingId = null; choosingExercises = true },
+                onReplace = { id -> catalogQuery = ""; replacingId = id; choosingExercises = true },
+                modifier = Modifier.padding(padding),
             )
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp),
@@ -247,7 +273,7 @@ private fun TemplateScreenContent(
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 items(templates, key = { it.id }) { template ->
-                    TemplateCard(template, busy,
+                    TemplateCard(template, itemsByTemplate[template.id].orEmpty(), dislikedIds, busy,
                         onStart = { participants = listOf(ownerId); startId = template.id },
                         onEdit = { vm.edit(template.id) },
                         onExport = { vm.prepareExport(template.id) { exportPicker.launch(it) } },
@@ -357,9 +383,10 @@ private fun StatusText(busy: Boolean, error: String?, message: String?) {
     message?.let { Text(it, color = sectionColors().accent, style = MaterialTheme.typography.bodyMedium) }
 }
 
+/** Карточка программы: состав виден сразу, упражнения с «Не нравится» помечены и ведут к замене. */
 @Composable
-private fun TemplateCard(template: WorkoutTemplate, busy: Boolean, onStart: () -> Unit, onEdit: () -> Unit,
-    onExport: () -> Unit, onDelete: () -> Unit) {
+private fun TemplateCard(template: WorkoutTemplate, items: List<TemplateItemRef>, disliked: Set<Long>, busy: Boolean,
+    onStart: () -> Unit, onEdit: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit) {
     FitCard(spacing = 12.dp) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             IconBadge(Icons.AutoMirrored.Rounded.ListAlt)
@@ -370,13 +397,29 @@ private fun TemplateCard(template: WorkoutTemplate, busy: Boolean, onStart: () -
                 MenuAction("Удалить", Icons.Rounded.Delete, destructive = true, onClick = onDelete),
             ), contentDescription = "Действия: ${template.name}", enabled = !busy)
         }
+        if (items.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items.forEachIndexed { index, item ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("${index + 1}. ${item.name}", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
+                    if (item.exerciseId in disliked) Icon(Icons.Rounded.ThumbDown, contentDescription = "Не нравится",
+                        tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+        val unwanted = items.filter { it.exerciseId in disliked }
+        if (unwanted.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Не нравится: " + unwanted.joinToString { it.name }, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error)
+            FitButton("Подобрать замену", onEdit, kind = FitButtonKind.Tonal, compact = true, icon = Icons.Rounded.SwapHoriz, enabled = !busy)
+        }
         FitButton("Начать по программе", onStart, Modifier.fillMaxWidth(), icon = Icons.Rounded.PlayArrow, enabled = !busy)
     }
 }
 
 @Composable
 private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, message: String?, ownerName: String, vm: TemplatesViewModel,
-    exercises: List<Exercise>, onAdd: () -> Unit, modifier: Modifier = Modifier) {
+    exercises: List<Exercise>, disliked: Set<Long>, onAdd: () -> Unit, onReplace: (Long) -> Unit, modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item("name") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -394,11 +437,14 @@ private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, 
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         ExerciseGuideThumb(exercise?.let(ExerciseGuides::forExercise) ?: ExerciseGuides.resolve(row.name),
                             exercise?.photoPath, displayName = row.name)
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("${index + 1}. ${row.name}", style = MaterialTheme.typography.titleMedium)
                             Text(row.muscleGroup, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (row.exerciseId in disliked) DislikedPill()
                         }
                     }
+                    if (row.exerciseId in disliked) FitButton("Подобрать замену", { onReplace(row.exerciseId) }, Modifier.fillMaxWidth(),
+                        kind = FitButtonKind.Tonal, icon = Icons.Rounded.SwapHoriz, enabled = !busy)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         IconButton(onClick = { vm.moveExercise(row.exerciseId, -1) }, enabled = !busy && index > 0) {
                             Icon(Icons.Rounded.ArrowUpward, "Выше: ${row.name}")
@@ -406,6 +452,10 @@ private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, 
                         IconButton(onClick = { vm.moveExercise(row.exerciseId, 1) }, enabled = !busy && index < draft.rows.lastIndex) {
                             Icon(Icons.Rounded.ArrowDownward, "Ниже: ${row.name}")
                         }
+                        IconButton(onClick = { onReplace(row.exerciseId) }, enabled = !busy) {
+                            Icon(Icons.Rounded.SwapHoriz, "Заменить: ${row.name}")
+                        }
+                        DislikeToggle(row.exerciseId in disliked, { vm.toggleDislike(row.exerciseId) }, row.name, enabled = !busy)
                         IconButton(onClick = { vm.removeExercise(row.exerciseId) }, enabled = !busy) {
                             Icon(Icons.Rounded.Delete, "Убрать: ${row.name}")
                         }
@@ -429,14 +479,21 @@ private fun TemplateEditor(draft: TemplateDraft, busy: Boolean, error: String?, 
     }
 }
 
+/**
+ * Каталог для программы: избранные сверху, «Не нравится» в конце. С [replacing] подбирает замену:
+ * первыми идут упражнения той же группы мышц, а кнопка ставит выбранное на место заменяемого.
+ */
 @Composable
-private fun TemplateCatalog(exercises: List<Exercise>, favoriteIds: Set<Long>, selected: Set<Long>, query: String,
-    onQuery: (String) -> Unit, onAdd: (Exercise) -> Unit, modifier: Modifier = Modifier) {
-    val filtered = exercises.filter { query.isBlank() || "${it.name} ${it.muscleGroup} ${it.equipment}".contains(query.trim(), ignoreCase = true) }
+private fun TemplateCatalog(exercises: List<Exercise>, favoriteIds: Set<Long>, disliked: Set<Long>, selected: Set<Long>, query: String,
+    onQuery: (String) -> Unit, onAdd: (Exercise) -> Unit, modifier: Modifier = Modifier, replacing: TemplateDraftRow? = null) {
+    val filtered = exercises
+        .filter { query.isBlank() || "${it.name} ${it.muscleGroup} ${it.equipment}".contains(query.trim(), ignoreCase = true) }
+        .sortedWith(compareBy({ it.id in disliked }, { replacing != null && it.muscleGroup != replacing.muscleGroup }, { it.id !in favoriteIds }))
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         OutlinedTextField(query, onQuery, label = { Text("Найти упражнение") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge, leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) })
-        Text("Добавлено: ${selected.size} из 100 · избранные сверху", modifier = Modifier.padding(vertical = 8.dp),
+        Text(if (replacing != null) "Вместо «${replacing.name}» · сначала ${replacing.muscleGroup.lowercase()}, подходы и повторы сохранятся"
+            else "Добавлено: ${selected.size} из 100 · избранные сверху", modifier = Modifier.padding(vertical = 8.dp),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
             if (filtered.isEmpty()) item { Text("Ничего не найдено. Попробуйте другое название.") }
@@ -445,7 +502,8 @@ private fun TemplateCatalog(exercises: List<Exercise>, favoriteIds: Set<Long>, s
                 FitCard(shape = MaterialTheme.shapes.medium, contentPadding = PaddingValues(12.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         ExerciseGuideThumb(ExerciseGuides.forExercise(exercise), exercise.photoPath, displayName = exercise.name)
-                        Column(Modifier.weight(1f)) {
+                        // Кнопка под названием, а не справа: на узком экране с крупным шрифтом название не сжимается.
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (exercise.id in favoriteIds) Icon(Icons.Rounded.Star, contentDescription = "Избранное",
                                     tint = fitAccents.gold, modifier = Modifier.size(16.dp))
@@ -453,10 +511,12 @@ private fun TemplateCatalog(exercises: List<Exercise>, favoriteIds: Set<Long>, s
                             }
                             Text("${exercise.muscleGroup} · ${exercise.equipment}", style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (exercise.id in disliked) DislikedPill()
+                            FitButton(if (included) "В программе" else if (replacing != null) "Заменить" else "Добавить", { onAdd(exercise) },
+                                kind = if (included) FitButtonKind.Plain else FitButtonKind.Tonal, compact = true,
+                                icon = if (included) Icons.Rounded.Check else null,
+                                enabled = !included && (replacing != null || selected.size < 100))
                         }
-                        FitButton(if (included) "Добавлено" else "Добавить", { onAdd(exercise) },
-                            kind = if (included) FitButtonKind.Plain else FitButtonKind.Tonal, compact = true,
-                            icon = if (included) Icons.Rounded.Check else null, enabled = !included && selected.size < 100)
                     }
                 }
             }
